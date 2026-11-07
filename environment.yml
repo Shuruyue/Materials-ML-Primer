@@ -1,0 +1,27 @@
+# conda provides only Python; every package comes from pip. Mixing conda-forge's
+# numpy/scipy with the PyTorch wheels loads two OpenMP runtimes (libomp and
+# libiomp5md) on Windows, and importing torch then fails.
+#
+# After creating the environment, install this repository into it:
+#   conda activate mmp
+#   pip install -e .
+name: mmp
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu132
+      - torch
+      - torch-geometric
+      - numpy
+      - scipy
+      - matplotlib
+      - pandas
+      - pymatgen
+      - jarvis-tools
+      - jupyterlab
+      - ipykernel
+      - nbconvert
+      - pytest

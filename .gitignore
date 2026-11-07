@@ -1,0 +1,15 @@
+# Downloaded datasets are fetched by the notebooks
+data/
+
+# Trained model weights and training logs are regenerated, not committed
+*.pt
+*.pth
+*.ckpt
+runs/
+
+# Python / Jupyter
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+build/
