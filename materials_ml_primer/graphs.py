@@ -17,7 +17,6 @@ from itertools import product
 
 import numpy as np
 
-
 # --------------------------------------------------------------------------
 # Lattice geometry
 # --------------------------------------------------------------------------
@@ -145,7 +144,7 @@ def build_graph(lattice, frac_coords, cutoff, max_neighbors=None):
         rank = np.zeros(len(centers), dtype=int)
         starts = np.r_[0, np.nonzero(np.diff(centers))[0] + 1]
         counts = np.diff(np.r_[starts, len(centers)])
-        for s, c in zip(starts, counts):
+        for s, c in zip(starts, counts, strict=True):
             rank[s:s + c] = np.arange(c)
         keep = rank < max_neighbors
         centers, neighbors = centers[keep], neighbors[keep]

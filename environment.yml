@@ -19,6 +19,7 @@ dependencies:
       - scipy
       - matplotlib
       - pandas
+      - scikit-learn
       - pymatgen
       - jarvis-tools
       - jupyterlab

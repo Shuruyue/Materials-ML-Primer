@@ -32,7 +32,7 @@ def random_cell(seed, n_atoms=5):
 
 
 def edge_set(centers, neighbors, images):
-    return {(int(i), int(j), *map(int, n)) for i, j, n in zip(centers, neighbors, images)}
+    return {(int(i), int(j), *map(int, n)) for i, j, n in zip(centers, neighbors, images, strict=True)}
 
 
 def random_rotation(seed):
@@ -156,8 +156,8 @@ def test_matches_pymatgen_edge_for_edge(seed):
     pc, pj, pn, pd = s.get_neighbor_list(cutoff)
     c, j, n, d = neighbor_list(lat, frac, cutoff)
     assert edge_set(c, j, n) == edge_set(pc, pj, pn.astype(int))
-    mine = {(int(a), int(b), *map(int, m)): x for a, b, m, x in zip(c, j, n, d)}
-    theirs = {(int(a), int(b), *map(int, m)): x for a, b, m, x in zip(pc, pj, pn.astype(int), pd)}
+    mine = {(int(a), int(b), *map(int, m)): x for a, b, m, x in zip(c, j, n, d, strict=True)}
+    theirs = {(int(a), int(b), *map(int, m)): x for a, b, m, x in zip(pc, pj, pn.astype(int), pd, strict=True)}
     np.testing.assert_allclose([mine[e] for e in theirs], list(theirs.values()), rtol=1e-12)
 
 
@@ -176,8 +176,8 @@ def test_rotation_invariance(seed, cell):
     rot = random_rotation(seed + 10)
     c0, j0, n0, d0 = neighbor_list(lat, frac, 6.0)
     c1, j1, n1, d1 = neighbor_list(lat @ rot.T, frac, 6.0)
-    e0 = {(int(a), int(b), *map(int, m)): x for a, b, m, x in zip(c0, j0, n0, d0)}
-    e1 = {(int(a), int(b), *map(int, m)): x for a, b, m, x in zip(c1, j1, n1, d1)}
+    e0 = {(int(a), int(b), *map(int, m)): x for a, b, m, x in zip(c0, j0, n0, d0, strict=True)}
+    e1 = {(int(a), int(b), *map(int, m)): x for a, b, m, x in zip(c1, j1, n1, d1, strict=True)}
     assert e0.keys() == e1.keys()
     np.testing.assert_allclose([e1[k] for k in e0], list(e0.values()), rtol=1e-12)
 
