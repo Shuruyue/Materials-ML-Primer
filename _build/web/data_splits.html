@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Splits Explorer</title>
+<meta name="description" content="How much a random train/test split flatters a materials model: formation-energy errors of one gradient-boosting model under random, formula, chemical-system and prototype splits, leave one element out, and materials added to JARVIS-DFT after 2021.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/*@HOUSE_CSS@*/
+
+/* ---------------------------------------------------------------- page-specific */
+:root { --s4: #8a5cd1; --s5: #c2378f; --hot-0: #fbeee6; --hot-1: #f2b48f; --hot-2: #e2733f; --hot-3: #b4471a; --hot-4: #6e2408; --neg: #2a78d6; --zero: #ecebe6; --pos: #eb6834; --na: #e1e0da; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --s4: #a07de0; --s5: #e05fb0; --zero: #3a3a37; --na: #2c2c2a; } }
+:root[data-theme="dark"] { --s4: #a07de0; --s5: #e05fb0; --zero: #3a3a37; --na: #2c2c2a; }
+body { margin: 0; }
+a { color: var(--accent-ink); }
+.head .links { font-size: .82rem; color: var(--ink-2); display: flex; gap: 14px; flex-wrap: wrap; }
+.ro .v .x { font-size: .8rem; color: var(--ink-2); margin-left: 6px; }
+
+/* dot plot / dumbbell / bars: HTML rows on a shared scale */
+.rows { display: grid; gap: 2px; margin-top: 8px; }
+.drow { display: grid; grid-template-columns: minmax(150px, 210px) minmax(0, 1fr) 160px; gap: 10px; align-items: center; padding: 3px 6px; border-radius: 8px; }
+.drow.pick { cursor: pointer; }
+.drow.pick:hover { background: var(--surface-2); }
+.drow[aria-pressed="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.drow .dl { font-size: .84rem; line-height: 1.25; }
+.drow .dl small { display: block; color: var(--muted); font-size: .72rem; }
+.drow .dv { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: .8rem; text-align: right; color: var(--ink-2); white-space: nowrap; }
+.drow .dv b { color: var(--ink); font-weight: 500; }
+.track { position: relative; height: 24px; }
+.track .gl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--grid); }
+.track .wh { position: absolute; top: 50%; height: 2px; margin-top: -1px; background: var(--accent); }
+.track .wh::before, .track .wh::after { content: ""; position: absolute; top: -4px; width: 1.5px; height: 10px; background: var(--accent); }
+.track .wh::before { left: 0; } .track .wh::after { right: 0; }
+.track .dot { position: absolute; top: 50%; width: 11px; height: 11px; border-radius: 50%; transform: translate(-50%, -50%); background: var(--accent); border: 1.5px solid var(--surface); }
+.track .dot.hollow { background: var(--surface); border-color: var(--accent); }
+.track .fold { position: absolute; top: 50%; width: 5px; height: 5px; border-radius: 50%; transform: translate(-50%, -50%); background: var(--ink-2); opacity: .45; }
+.track .base { position: absolute; top: 50%; width: 9px; height: 9px; transform: translate(-50%, -50%); border: 1.5px solid var(--muted); background: var(--surface); }
+.track .bar { position: absolute; top: 6px; bottom: 6px; left: 0; background: var(--accent); border-radius: 0 4px 4px 0; opacity: .85; }
+.track .link { position: absolute; top: 50%; height: 2px; margin-top: -1px; background: var(--axis); }
+.axisrow { display: grid; grid-template-columns: minmax(150px, 210px) minmax(0, 1fr) 160px; gap: 10px; padding: 0 6px; }
+.axisrow .ticks { position: relative; height: 18px; font-family: var(--font-num); font-size: 10.5px; color: var(--muted); }
+.axisrow .ticks span { position: absolute; transform: translateX(-50%); top: 2px; }
+.axislab { text-align: center; font-size: .78rem; color: var(--ink-2); margin-top: 2px; }
+.keyline { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .78rem; color: var(--ink-2); margin-top: 8px; }
+.keyline span { display: inline-flex; align-items: center; gap: 6px; }
+.keyline i { display: inline-block; flex: none; }
+.compact .drow, .compact .axisrow { grid-template-columns: minmax(104px, 150px) minmax(0, 1fr) 58px; }
+@media (max-width: 640px) {
+  .drow, .axisrow, .compact .drow, .compact .axisrow { grid-template-columns: minmax(0, 1fr) auto; }
+  .drow .track, .axisrow .ticks { grid-column: 1 / -1; grid-row: 2; }
+  .axisrow > div:first-child, .axisrow > div:last-child { display: none; }
+}
+
+/* heat table */
+table.heat td { text-align: center; }
+table.heat th { text-align: center; white-space: normal; line-height: 1.2; vertical-align: bottom; }
+table.heat th:first-child, table.heat td:first-child { text-align: left; }
+table.heat tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
+table.heat td.c { color: #141412; }
+
+/* periodic table */
+.ptable { display: grid; grid-template-columns: repeat(18, minmax(0, 1fr)); gap: 3px; margin-top: 8px; }
+.el { font: inherit; border: 0; border-radius: 5px; padding: 0; aspect-ratio: 1 / 1.05; display: grid; place-content: center; text-align: center; cursor: pointer; line-height: 1.1; min-width: 0; }
+.el b { font-size: clamp(.62rem, 1.15vw, .92rem); font-weight: 600; }
+.el span { font-family: var(--font-num); font-size: clamp(.5rem, .8vw, .66rem); }
+.el.na { background: var(--na); color: var(--muted); cursor: default; }
+.el:hover:not(.na) { outline: 2px solid var(--ink-2); outline-offset: 1px; }
+.el[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 1px; }
+.el.gap { visibility: hidden; }
+@media (max-width: 760px) { .el span { display: none; } }
+.scale { display: grid; grid-template-columns: auto minmax(120px, 360px); gap: 4px 12px; align-items: center; font-size: .78rem; color: var(--ink-2); margin-top: 10px; }
+.scale .bar { height: 10px; border-radius: 3px; }
+.scale .lbl { grid-column: 2; display: flex; justify-content: space-between; font-family: var(--font-num); font-size: .72rem; color: var(--muted); margin-top: -2px; }
+.eldetail { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; margin-top: 8px; }
+.eldetail .ro .v { font-size: 1rem; }
+.eldetail .ro .v small { font-size: .7rem; }
+.bigsym { font-size: 2rem; font-weight: 600; line-height: 1; }
+.pgrid { display: grid; grid-template-columns: minmax(0, 560px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 1100px) { .pgrid { grid-template-columns: minmax(0, 1fr); } }
+.pgrid .eldetail { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+</style>
+
+<div class="app">
+  <header class="head">
+    <h1><span class="en">Materials-ML-Primer · data_splits · JARVIS-DFT formation energy</span>How much does a random split flatter a materials model?</h1>
+    <p class="sys">One gradient-boosting model with <b>150 composition and structure features</b>, trained on JARVIS-DFT and tested five ways: a random split, splits that hold out polymorphs, chemical systems or structure types together, holding out every compound of one element, and the materials JARVIS added after the training data was frozen. Every number on this page is written by the notebook.</p>
+    <p class="links"><a href="https://github.com/Shuruyue/Materials-ML-Primer/tree/main/experiments/data_splits">Experiment README</a><a href="../experiments/data_splits/data_splits.html">Executed notebook</a><a href="https://github.com/Shuruyue/Materials-ML-Primer">Repository</a></p>
+  </header>
+
+  <section class="readouts" aria-label="Key results" id="readouts"></section>
+  <div class="alert" id="alert" hidden></div>
+
+  <div class="layout">
+    <aside class="rail" aria-label="Controls">
+      <div class="grp">
+        <h2>Test set</h2>
+        <div class="presets" id="sets"></div>
+      </div>
+      <div class="grp">
+        <h2>Element held out</h2>
+        <div class="ctl">
+          <div class="row"><label for="elSel">Element</label><select id="elSel"></select></div>
+          <div class="note">Or click an element in the periodic table.</div>
+        </div>
+      </div>
+      <div class="grp">
+        <h2>Colour the periodic table by</h2>
+        <div class="seg" id="segColor" role="group" aria-label="Periodic-table colour" style="grid-template-columns: 1fr 1fr 1fr">
+          <button type="button" data-v="r2">R²</button>
+          <button type="button" data-v="mae">MAE</button>
+          <button type="button" data-v="bias">Bias</button>
+        </div>
+      </div>
+      <div class="grp">
+        <h2>Distance plots show</h2>
+        <div class="checks" id="distChecks"></div>
+      </div>
+      <div class="grp">
+        <h2>Data</h2>
+        <div class="derived" id="dataInfo" style="grid-template-columns: auto 1fr"></div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="tabs" role="tablist" aria-label="Views">
+        <button class="tab" role="tab" id="t-splits" aria-controls="p-splits" aria-selected="true">Splits</button>
+        <button class="tab" role="tab" id="t-elements" aria-controls="p-elements" aria-selected="false">Leave one element out</button>
+        <button class="tab" role="tab" id="t-prospective" aria-controls="p-prospective" aria-selected="false">Added after 2021</button>
+        <button class="tab" role="tab" id="t-distance" aria-controls="p-distance" aria-selected="false">Distance to the training set</button>
+        <button class="tab" role="tab" id="t-checks" aria-controls="p-checks" aria-selected="false">Checks and method</button>
+      </div>
+
+      <section class="panel" id="p-splits" role="tabpanel" aria-labelledby="t-splits">
+        <div class="answer" id="answerSplits"></div>
+        <div class="card"><h3>Test error by split</h3><div class="sub">Mean absolute error of the formation energy, log scale. Click a row to choose the test set of the other charts.</div><div id="dotplot"></div></div>
+        <div class="card"><h3>What the training set already contains</h3><div class="sub">Share of the test materials whose training set holds a relative of the given kind</div><div class="tablewrap" style="border:0;padding:0;margin-top:8px"><table class="heat" id="heat"></table></div><div class="note" style="margin-top:8px">Polymorph: same reduced formula. Same: the same set of elements. Larger: a system that contains the test material's elements (Li–Mn–O for Li–O). Smaller: a subsystem with at least two elements (Li–O for Li–Mn–O). None: none of these three. Prototype: the same space group and Wyckoff positions.</div></div>
+        <div class="card"><h3 id="parityTitle">Predicted against DFT</h3><div class="sub" id="paritySub"></div>
+          <div class="pgrid"><div class="chart" id="cParity"></div><div><div class="eldetail" id="setDetail"></div><div class="note" id="setNote" style="margin-top:10px"></div></div></div></div>
+      </section>
+
+      <section class="panel" id="p-elements" role="tabpanel" aria-labelledby="t-elements" hidden>
+        <div class="answer" id="answerElements"></div>
+        <div class="card"><h3>Every compound of one element held out</h3><div class="sub" id="ptSub"></div><div class="ptable" id="ptable"></div><div class="scale" id="ptScale"></div></div>
+        <div class="grid2">
+          <div class="card"><h3 id="elTitle">Element</h3><div class="sub" id="elSub"></div><div class="eldetail" id="elDetail"></div></div>
+          <div class="card"><h3>The same elements in another study</h3><div class="sub" id="liSub"></div><div class="chart" id="cLi"></div></div>
+        </div>
+      </section>
+
+      <section class="panel" id="p-prospective" role="tabpanel" aria-labelledby="t-prospective" hidden>
+        <div class="answer" id="answerProspective"></div>
+        <div class="card"><h3>Does a relative in the training set help?</h3><div class="sub">MAE of the added materials with (filled) and without (open) a relative of the given kind in the 2021 training set</div><div id="dumbbell"></div></div>
+        <div class="grid2">
+          <div class="card"><h3>Error by kind of material</h3><div class="sub">JARVIS dimensionality label of the added materials</div><div id="dimBars" class="compact"></div></div>
+          <div class="card"><h3>Experimental structures</h3><div class="sub">Materials with an ICSD id, that is, a structure known from experiment</div><div id="icsd"></div></div>
+        </div>
+      </section>
+
+      <section class="panel" id="p-distance" role="tabpanel" aria-labelledby="t-distance" hidden>
+        <div class="answer" id="answerDistance"></div>
+        <div class="grid2">
+          <div class="card"><h3>How far the test materials are from the training set</h3><div class="sub">Share of each test set per distance bin; distance = mean of the five nearest training materials in the 150 standardized features, RMS per feature</div><div class="chart" id="cHist"></div></div>
+          <div class="card"><h3>Error against distance</h3><div class="sub">MAE in each distance bin with at least 30 materials, log–log</div><div class="chart" id="cBinned"></div></div>
+        </div>
+        <div class="tablewrap"><table id="distTable"></table></div>
+      </section>
+
+      <section class="panel" id="p-checks" role="tabpanel" aria-labelledby="t-checks" hidden>
+        <div class="card"><h3>Checks of the numbers</h3><div class="sub">Each result compared with something independent</div><div class="tablewrap" style="border:0;padding:0;margin-top:8px"><table id="checksTable"></table></div></div>
+        <div class="card src">
+          <h3>How the test sets are built</h3>
+          <p><b>Model.</b> scikit-learn <code>HistGradientBoostingRegressor</code> (learning rate 0.05, at most 5000 iterations, 63 leaves, early stopping on a validation set) on 136 composition and 14 structure features, the best model of the <code>baselines</code> experiment.</p>
+          <p><b>Group splits.</b> 10-fold cross-validation; every group lies in one fold, and the groups are dealt out from the largest to the smallest into the fold with the fewest materials. Fold <i>k</i> is the test set, fold <i>k</i> + 1 the validation set, the other eight folds the training set (80/10/10). Every material is predicted once.</p>
+          <p><b>Leave one element out.</b> For each element in at least 200 materials, all its compounds form the test set; the rest is split by chemical system into training (90 %) and validation (10 %) sets.</p>
+          <p><b>Added after 2021.</b> Trained on the 2021.8.18 snapshot (split by chemical system 90/10), tested on every material of the 2025.9.24 snapshot that is not in the 2021 one. Both snapshots agree on all shared materials.</p>
+          <p><b>Prototype label.</b> spglib space group (tolerance 0.1 Å) and, per species, its count in the reduced formula and its Wyckoff letters, made independent of the choice of origin and axes with the Wyckoff-set table of PyXtal.</p>
+        </div>
+        <div class="card src">
+          <h3>Differences from standard practice</h3>
+          <p>No hyperparameter search per split; the random-split model reaches the iteration limit; one cross-validation pass and single runs (the spread is between folds); a strict prototype label (no fuzzy structure matching, so the prototype split is milder than one with it); one distance measure on hand-made features; the comparison with Li et al. uses another model, other descriptors and the 2022.12.12 snapshot. The materials added after 2021 were chosen by the JARVIS project and many are hypothetical: a test of the next batch of a database, not of experimental discovery. Details in the experiment README.</p>
+        </div>
+        <div class="card src">
+          <h3>Sources</h3>
+          <p><b>Data:</b> JARVIS-DFT (K. Choudhary et al., <i>npj Comput. Mater.</i> 6, 173, 2020), snapshots 2021.8.18 and 2025.9.24 via jarvis-tools.</p>
+          <p><b>Comparison:</b> K. Li et al., arXiv:2406.06489 (2024), per-element R² of XGBoost on JARVIS 2022.12.12, read from their Supplementary Figure 2.</p>
+          <p><b>Symmetry:</b> spglib; Wyckoff sets of the normalizers from PyXtal (MIT licence; Bilbao Crystallographic Server, WYCKSETS).</p>
+        </div>
+      </section>
+    </main>
+  </div>
+  <p class="foot" id="foot"></p>
+</div>
+
+<script type="application/json" id="data">@DATA_JSON@</script>
+<script>
+"use strict";
+window.addEventListener("error", (e) => { const a = document.getElementById("alert"); a.hidden = false; a.textContent = "This page hit an error: " + e.message; });
+/*@CHART_JS@*/
+
+// =================================================================== data and helpers
+const D = JSON.parse(document.getElementById("data").textContent);
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const f3 = (v) => v == null ? "—" : v.toFixed(3);
+const f2 = (v) => v == null ? "—" : v.toFixed(2);
+const pct = (v, d = 0) => v == null ? "—" : (100 * v).toFixed(d) + " %";  // narrow no-break space
+const sgn = (v, d = 2) => v == null ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(d);
+const minus = (s) => String(s).replace(/-/g, "−");
+function percentile(arr, q) { // numpy's default (linear interpolation)
+  const a = arr.slice().sort((x, y) => x - y), h = (a.length - 1) * q / 100, lo = Math.floor(h), hi = Math.ceil(h);
+  return a[lo] + (h - lo) * (a[hi] - a[lo]);
+}
+const CV = ["random", "formula groups", "chemical-system groups", "prototype groups"];
+const SETS = {
+  "random": { label: "Random", note: "10-fold cross-validation", color: "var(--s1)" },
+  "formula groups": { label: "Formula groups", note: "polymorphs held out together", color: "var(--q3)" },
+  "chemical-system groups": { label: "Chemical-system groups", note: "same elements held out together", color: "var(--s2)" },
+  "prototype groups": { label: "Prototype groups", note: "same structure type held out together", color: "var(--s3)" },
+  "leave one element out": { label: "Leave one element out", note: "all compounds of one element", color: "var(--s5)" },
+  "prospective": { label: "Added after 2021", note: "trained on 2021, tested on later materials", color: "var(--s4)" },
+};
+const RELNAMES = { polymorph: "Polymorph", same: "Same system", larger: "Larger system", smaller: "Smaller system", none: "None of these", prototype: "Same prototype" };
+const loeoEls = Object.keys(D.loeo).sort((a, b) => D.loeo[a].z - D.loeo[b].z);
+const loeoMAE = loeoEls.map((e) => D.loeo[e].mae);
+const loeoMed = percentile(loeoMAE, 50), loeoQ1 = percentile(loeoMAE, 25), loeoQ3 = percentile(loeoMAE, 75);
+const ranked = loeoEls.slice().sort((a, b) => D.loeo[a].r2 - D.loeo[b].r2);
+const rnd = D.cv.random.mae;
+const times = (v) => "×" + (v / rnd).toFixed(2);
+
+// =================================================================== state (URL hash)
+const DEFAULT = { tab: "splits", set: "random", el: ranked[0], color: "r2", dist: "random,chemical-system groups,prototype groups,leave one element out,prospective" };
+const S = Object.assign({}, DEFAULT);
+for (const [k, v] of new URLSearchParams(location.hash.slice(1))) if (k in DEFAULT) S[k] = v;
+if (!(S.set in SETS) || S.set === "leave one element out") S.set = DEFAULT.set;
+if (!(S.el in D.loeo)) S.el = DEFAULT.el;
+if (!["r2", "mae", "bias"].includes(S.color)) S.color = DEFAULT.color;
+if (!["splits", "elements", "prospective", "distance", "checks"].includes(S.tab)) S.tab = DEFAULT.tab;
+const theme = new URLSearchParams(location.search).get("theme"); if (theme === "dark" || theme === "light") document.documentElement.dataset.theme = theme;
+function saveHash() { const p = new URLSearchParams(); for (const k in DEFAULT) if (S[k] !== DEFAULT[k]) p.set(k, S[k]); history.replaceState(null, "", p.toString() ? "#" + p.toString() : location.pathname + location.search); }
+const distOn = () => new Set(S.dist.split(",").filter((s) => s in D.distance.sets));
+
+// =================================================================== header, readouts, rail
+if (D.about.quick_test_run) { const a = $("alert"); a.hidden = false; a.textContent = "These numbers come from a short test run of the notebook (few iterations, two folds, four elements), not from the full run."; }
+function readout(k, v, x, s) {
+  const d = el("div", "ro"); d.append(el("div", "k", k));
+  const vv = el("div", "v"); vv.append(document.createTextNode(v), el("small", null, " eV/atom")); if (x) vv.append(el("span", "x", x)); d.append(vv);
+  if (s) d.append(el("div", "s", s)); return d;
+}
+$("readouts").append(
+  readout("Random split (10-fold CV)", f3(rnd), null, "R² " + f3(D.cv.random.r2) + "; the usual headline number"),
+  readout("Chemical systems held out", f3(D.cv["chemical-system groups"].mae), times(D.cv["chemical-system groups"].mae), "new combinations of known elements"),
+  readout("Structure types held out", f3(D.cv["prototype groups"].mae), times(D.cv["prototype groups"].mae), "new prototypes, spread " + f3(D.cv["prototype groups"].sd) + " between folds"),
+  readout("One element held out (median)", f3(loeoMed), times(loeoMed), "worst: " + ranked.slice(0, 3).join(", ")),
+  readout("Added to JARVIS after 2021", f3(D.prospective.mae), times(D.prospective.mae), D.about.n_added.toLocaleString("en") + " materials computed later"),
+);
+for (const k of Object.keys(SETS).filter((k) => k !== "leave one element out")) {
+  const b = el("button", "preset"); b.type = "button"; b.dataset.set = k;
+  b.append(document.createTextNode(SETS[k].label), el("small", null, SETS[k].note)); b.addEventListener("click", () => { S.set = k; update(); });
+  $("sets").append(b);
+}
+for (const e of loeoEls) { const o = el("option", null, `${e} (Z = ${D.loeo[e].z})`); o.value = e; $("elSel").append(o); }
+$("elSel").addEventListener("change", () => { S.el = $("elSel").value; update(); });
+for (const b of $("segColor").querySelectorAll("button")) b.addEventListener("click", () => { S.color = b.dataset.v; update(); });
+for (const k of Object.keys(D.distance.sets)) {
+  const l = el("label"); const c = el("input"); c.type = "checkbox"; c.dataset.set = k;
+  c.addEventListener("change", () => { const on = distOn(); c.checked ? on.add(k) : on.delete(k); S.dist = Object.keys(D.distance.sets).filter((s) => on.has(s)).join(","); update(); });
+  const sw = el("i"); sw.style.cssText = `width:12px;height:3px;border-radius:2px;background:${SETS[k].color}`; l.append(c, sw, document.createTextNode(SETS[k].label)); $("distChecks").append(l);
+}
+for (const [k, v] of [["Training", D.about.train_snapshot.replace("JARVIS-DFT ", "") + ", " + D.about.n_2021.toLocaleString("en")], ["Added", "to " + D.about.latest_snapshot.replace("JARVIS-DFT ", "") + ", " + D.about.n_added.toLocaleString("en")], ["Target", "formation energy"], ["Folds", String(D.about.n_folds)]]) { $("dataInfo").append(el("span", null, k), el("span", "num", v)); }
+$("foot").innerHTML = "Built from <code>experiments/data_splits/data_splits_results.json</code>, which the notebook writes; the page only draws it. Code, notebook and README: <a href=\"https://github.com/Shuruyue/Materials-ML-Primer\">github.com/Shuruyue/Materials-ML-Primer</a>. Style shared with the <a href=\"https://shuruyue.github.io/Ethanol-Water-VLE/web/ethanol-water-vle.html\">ethanol–water page</a>.";
+
+// =================================================================== tabs
+const TABS = ["splits", "elements", "prospective", "distance", "checks"];
+for (const t of TABS) $("t-" + t).addEventListener("click", () => { S.tab = t; update(); });
+$("t-splits").parentElement.addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return; const i = TABS.indexOf(S.tab);
+  S.tab = TABS[(i + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length]; update(); $("t-" + S.tab).focus();
+});
+
+// =================================================================== shared scale rows
+function logPos(v, lo, hi) { return 100 * (Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)); }
+function linPos(v, lo, hi) { return 100 * (v - lo) / (hi - lo); }
+function axis(host, ticks, pos, label, fmt = (v) => String(v)) {
+  const r = el("div", "axisrow"); r.append(el("div")); const t = el("div", "ticks");
+  for (const v of ticks) { const s = el("span", null, fmt(v)); s.style.left = pos(v) + "%"; t.append(s); } r.append(t, el("div")); host.append(r);
+  if (label) host.append(el("div", "axislab", label));
+}
+function track(ticks, pos) { const t = el("div", "track"); for (const v of ticks) { const g = el("div", "gl"); g.style.left = pos(v) + "%"; t.append(g); } return t; }
+function put(t, cls, x, title) { const d = el("div", cls); d.style.left = x + "%"; if (title) d.title = title; t.append(d); return d; }
+function span(t, cls, a, b) { const d = el("div", cls); d.style.left = Math.min(a, b) + "%"; d.style.width = Math.abs(b - a) + "%"; t.append(d); return d; }
+
+// =================================================================== tab: splits
+function renderDotplot() {
+  const host = $("dotplot"); host.textContent = ""; const lo = 0.05, hi = 1.2, ticks = [0.05, 0.1, 0.2, 0.5, 1], P = (v) => logPos(v, lo, hi);
+  const rows = el("div", "rows");
+  const row = (key, label, note, draw, value, pick) => {
+    const r = el("div", "drow"); const l = el("div", "dl", label); l.append(el("small", null, note)); const t = track(ticks, P); draw(t);
+    const v = el("div", "dv"); v.innerHTML = value; r.append(l, t, v);
+    if (pick) { r.classList.add("pick"); r.tabIndex = 0; r.setAttribute("role", "button"); r.setAttribute("aria-pressed", String(S.set === key)); r.addEventListener("click", () => { S.set = key; update(); }); r.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); S.set = key; update(); } }); }
+    rows.append(r);
+  };
+  for (const k of CV) {
+    const c = D.cv[k];
+    row(k, SETS[k].label, SETS[k].note, (t) => {
+      put(t, "base", P(c.base), "predicting the training mean: " + f3(c.base));
+      span(t, "wh", P(Math.max(lo, c.mae - c.sd)), P(c.mae + c.sd));
+      for (const f of c.per_fold) if (f != null) put(t, "fold", P(f), "one fold: " + f3(f));
+      put(t, "dot", P(c.mae), "MAE " + f3(c.mae));
+    }, `<b>${f3(c.mae)}</b> ± ${f3(c.sd)}`, true);
+  }
+  row("leave one element out", SETS["leave one element out"].label, `median and quartiles of ${loeoEls.length} elements`, (t) => {
+    span(t, "wh", P(loeoQ1), P(loeoQ3)); const d = put(t, "dot", P(loeoMed), "median MAE " + f3(loeoMed)); d.style.background = SETS["leave one element out"].color;
+  }, `<b>${f3(loeoMed)}</b> (${f3(loeoQ1)}–${f3(loeoQ3)})`, false);
+  row("prospective", SETS.prospective.label, `${D.about.n_added.toLocaleString("en")} materials, one model`, (t) => {
+    put(t, "base", P(D.prospective.base), "predicting the training mean: " + f3(D.prospective.base)); put(t, "dot", P(D.prospective.mae), "MAE " + f3(D.prospective.mae));
+  }, `<b>${f3(D.prospective.mae)}</b>`, true);
+  host.append(rows); axis(host, ticks, P, "test MAE (eV/atom), log scale");
+  const k = el("div", "keyline");
+  const key = (style, text) => { const s = el("span"); const i = el("i"); i.style.cssText = style; s.append(i, document.createTextNode(text)); k.append(s); };
+  key("width:10px;height:10px;border-radius:50%;background:var(--accent)", "MAE over all test materials");
+  key("width:14px;height:2px;background:var(--accent)", "± standard deviation over folds (quartiles for elements)");
+  key("width:5px;height:5px;border-radius:50%;background:var(--ink-2);opacity:.45", "single folds");
+  key("width:8px;height:8px;border:1.5px solid var(--muted)", "predicting the training mean");
+  host.append(k);
+}
+function heatColor(v) { return `color-mix(in srgb, var(--accent) ${Math.round(8 + 72 * v)}%, var(--surface))`; }
+function renderHeat() {
+  const t = $("heat"); t.textContent = ""; const cols = D.relations.columns;
+  const hr = el("tr"); hr.append(el("th", null, "Test set")); for (const c of cols) hr.append(el("th", null, RELNAMES[c])); t.append(hr);
+  const rows = CV.map((k) => [k, D.relations.rows[k]]).concat([["prospective", cols.map((c) => D.prospective.relations[c].share)]]);
+  for (const [k, vals] of rows) {
+    const tr = el("tr"); if (k === S.set) tr.className = "sel"; tr.append(el("td", "txt", SETS[k].label));
+    vals.forEach((v) => { const td = el("td", null, pct(v)); td.style.background = heatColor(v); if (v > 0.55) td.style.color = "#fcfcfb"; tr.append(td); });
+    t.append(tr);
+  }
+}
+const parity = new Chart($("cParity"), { square: true, maxH: 420, m: { l: 52, r: 12, t: 10, b: 40 } });
+function renderParity() {
+  const prosp = S.set === "prospective", src = prosp ? D.parity.prospective : D.parity.cv;
+  const pred = prosp ? src.pred : src.pred[S.set];
+  const pts = src.dft.map((x, i) => [x, pred[i], i]).filter((p) => p[1] != null && p[0] != null);
+  const all = pts.flatMap((p) => [p[0], p[1]]), lo = Math.floor(Math.min(...all) * 2) / 2, hi = Math.ceil(Math.max(...all) * 2) / 2;
+  const full = prosp ? D.prospective.mae : D.cv[S.set].mae, n = prosp ? D.about.n_added : D.about.n_2021;
+  $("parityTitle").textContent = "Predicted against DFT · " + SETS[S.set].label;
+  $("paritySub").textContent = `${pts.length.toLocaleString("en")} random test materials of ${n.toLocaleString("en")}; MAE of the whole test set ${f3(full)} eV/atom. Hover for the material.`;
+  const box = $("setDetail"); box.textContent = "";
+  const card = (k, val, sub) => { const d = el("div", "ro"); d.append(el("div", "k", k), el("div", "v num", val)); if (sub) d.append(el("div", "s", sub)); box.append(d); };
+  if (prosp) {
+    const p = D.prospective;
+    card("Test MAE", f3(p.mae) + " eV/atom", times(p.mae) + " the random split"); card("R²", f3(p.r2)); card("Predicting the training mean", f3(p.base) + " eV/atom"); card("Boosting iterations", String(p.iters), "early stopping on a validation set");
+    $("setNote").textContent = `One model trained on the 2021 snapshot (split by chemical system into training and validation sets) predicts all ${D.about.n_added.toLocaleString("en")} materials added up to ${D.about.latest_snapshot.replace("JARVIS-DFT ", "")}.`;
+  } else {
+    const c = D.cv[S.set], folds = c.per_fold.filter((f) => f != null);
+    card("Test MAE", f3(c.mae) + " eV/atom", S.set === "random" ? "the usual headline number" : times(c.mae) + " the random split");
+    card("Spread between folds", "± " + f3(c.sd), `${folds.length} folds: ${f3(Math.min(...folds))}–${f3(Math.max(...folds))}`);
+    card("R²", f3(c.r2)); card("Predicting the training mean", f3(c.base) + " eV/atom"); card("Boosting iterations", String(c.iters), "mean over folds; the limit is 5000");
+    $("setNote").textContent = S.set === "random" ? "Materials are dealt into the folds at random, so relatives of most test materials sit in the training set." : `Every group lies in one fold, so no test material has a training material of the same ${S.set === "formula groups" ? "reduced formula" : S.set === "chemical-system groups" ? "chemical system" : "prototype"}.`;
+  }
+  parity.set({
+    aria: "Parity plot", crosshair: false,
+    x: { min: lo, max: hi, label: "DFT formation energy (eV/atom)", fmt: (v) => minus(fmtTick(v)) },
+    y: { min: lo, max: hi, label: "predicted (eV/atom)", fmt: (v) => minus(fmtTick(v)) },
+    marks: [{ kind: "seg", a: [lo, lo], b: [hi, hi], color: "var(--muted)", dash: "dash" }],
+    series: [{ kind: "points", pts, color: SETS[S.set].color, r: 2.6, opacity: 0.55, name: "test material", tipName: " ", noLegend: true,
+      title: (p) => `${src.formula[p[2]]} · ${src.jid[p[2]]}`, fmtPt: (p) => `${minus(p[1].toFixed(3))} predicted, ${minus(p[0].toFixed(3))} DFT` }],
+  });
+}
+
+// =================================================================== tab: elements
+const HOT = ["--hot-0", "--hot-1", "--hot-2", "--hot-3", "--hot-4"];
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function hexRGB(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function ramp(stops, t) { t = Math.min(1, Math.max(0, t)); const s = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(s)), f = s - i; const a = hexRGB(stops[i]), b = hexRGB(stops[i + 1]); return a.map((v, k) => Math.round(v + f * (b[k] - v))); }
+const COLOR = {
+  r2: { label: "test R² (darker = worse; below 0.5 drawn as 0.5)", t: (v) => (1 - v) / 0.5, ticks: ["1.0", "0.9", "0.8", "0.7", "0.6", "≤ 0.5"], stops: () => HOT.map(cssVar), fmt: (v) => f2(v) },
+  mae: { label: "test MAE in eV/atom (log scale)", t: (v) => (Math.log10(v) - Math.log10(0.05)) / (Math.log10(0.8) - Math.log10(0.05)), ticks: ["0.05", "0.1", "0.2", "0.4", "0.8"], stops: () => HOT.map(cssVar), fmt: (v) => v.toFixed(2) },
+  bias: { label: "mean of predicted − DFT in eV/atom (positive: predicted less stable than DFT)", t: (v) => (v + 0.6) / 1.2, ticks: ["−0.6", "−0.3", "0", "+0.3", "+0.6"], stops: () => [cssVar("--neg"), cssVar("--zero"), cssVar("--pos")], fmt: (v) => sgn(v) },
+};
+function renderPTable() {
+  const host = $("ptable"); host.textContent = ""; const C = COLOR[S.color], stops = C.stops();
+  const all = Object.assign({}, D.untested, D.loeo);
+  for (const e of Object.keys(all)) {
+    const v = all[e], [row, col] = v.pos, gridRow = row > 8 ? (row < 9 ? 9 : 10) : row;
+    const tested = e in D.loeo; const b = el("button", "el" + (tested ? "" : " na")); b.type = "button";
+    b.style.gridRow = String(Math.round(gridRow)); b.style.gridColumn = String(col);
+    b.append(el("b", null, e));
+    if (tested) {
+      const val = v[S.color], rgb = ramp(stops, C.t(val)); b.style.background = `rgb(${rgb})`;
+      b.style.color = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) < 140 ? "#fcfcfb" : "#141412";
+      b.append(el("span", null, C.fmt(val))); b.setAttribute("aria-pressed", String(e === S.el));
+      b.title = `${e}: ${v.n.toLocaleString("en")} materials, R² ${f2(v.r2)}, MAE ${f3(v.mae)}, bias ${sgn(v.bias, 3)}`;
+      b.addEventListener("click", () => { S.el = e; update(); });
+    } else { b.title = `${e}: ${v.n} materials, fewer than ${D.about.min_materials}, not tested`; b.disabled = true; }
+    host.append(b);
+  }
+  const spacer = el("div", "el gap"); spacer.style.gridRow = "8"; spacer.style.gridColumn = "1"; spacer.style.aspectRatio = "6 / 1"; host.append(spacer);
+  $("ptSub").textContent = `Colour: ${C.label}. Grey: fewer than ${D.about.min_materials} materials, not tested.`;
+  const sc = $("ptScale"); sc.textContent = ""; const bar = el("div", "bar");
+  bar.style.background = `linear-gradient(to right, ${(S.color === "r2" ? stops : stops).map((s) => s).join(", ")})`;
+  sc.append(el("span", null, S.color === "bias" ? "Bias" : S.color === "r2" ? "R²" : "MAE"), bar); const lb = el("div", "lbl"); for (const t of COLOR[S.color].ticks) lb.append(el("span", null, t)); sc.append(lb);
+}
+const liChart = new Chart($("cLi"), { square: true, maxH: 380, m: { l: 50, r: 12, t: 10, b: 40 } });
+function renderElement() {
+  const e = S.el, v = D.loeo[e], rank = ranked.indexOf(e) + 1;
+  $("elTitle").textContent = `${e} held out`;
+  $("elSub").textContent = `The model never saw a compound of ${e}: ${v.n.toLocaleString("en")} test materials. Rank ${rank} of ${loeoEls.length} from the worst R².`;
+  const box = $("elDetail"); box.textContent = "";
+  const card = (k, val, s, unit) => { const d = el("div", "ro"); const vv = el("div", "v num", val); if (unit) vv.append(el("small", null, " " + unit)); d.append(el("div", "k", k), vv); if (s) d.append(el("div", "s", s)); box.append(d); };
+  card("Test R²", f2(v.r2), v.r2 > 0.95 ? "above 0.95, like most elements" : "below 0.95");
+  card("Test MAE", f3(v.mae), "random split, all materials: " + f3(rnd), "eV/atom");
+  card("Bias (predicted − DFT)", sgn(v.bias, 3), v.bias > 0.05 ? "predicted less stable than DFT" : v.bias < -0.05 ? "predicted more stable than DFT" : "no clear offset", "eV/atom");
+  card("Li et al. 2024, R²", v.li2024 == null ? "not reported" : f2(v.li2024), "XGBoost, JARVIS 2022.12.12");
+  const common = loeoEls.filter((x) => D.loeo[x].li2024 != null);
+  const pts = common.map((x) => [D.loeo[x].li2024, D.loeo[x].r2, x]);
+  const lo = Math.min(-0.35, ...pts.flatMap((p) => [p[0], p[1]]).map((z) => z - 0.05));
+  $("liSub").textContent = `Test R² per element: K. Li et al. (2024) against this run, ${common.length} elements in both; Spearman correlation ${f2(D.loeo_spearman_li2024)}. Click a point to select the element.`;
+  const sel = pts.filter((p) => p[2] === e);
+  liChart.set({
+    aria: "R² per element, this run against Li et al. 2024", crosshair: false,
+    x: { min: lo, max: 1.02, label: "R², Li et al. 2024 (XGBoost)", fmt: (z) => minus(fmtTick(z)) },
+    y: { min: lo, max: 1.02, label: "R², this run (gradient boosting)", fmt: (z) => minus(fmtTick(z)) },
+    marks: [{ kind: "seg", a: [lo, lo], b: [1.02, 1.02], color: "var(--muted)", dash: "dash" }].concat(sel.map((p) => ({ kind: "point", x: p[0], y: p[1], color: "var(--s5)", shape: "circle", r: 6, label: p[2] }))),
+    series: [{ kind: "points", pts, color: "var(--s1)", r: 3.4, name: "element", tipName: " ", noLegend: true, title: (p) => p[2],
+      fmtPt: (p) => `${f2(p[1])} this run, ${f2(p[0])} Li et al.`, onPick: (p) => { S.el = p[2]; update(); } }],
+  });
+}
+
+// =================================================================== tab: prospective
+function renderProspective() {
+  const host = $("dumbbell"); host.textContent = ""; const P_ = D.prospective, rel = P_.relations;
+  const hi = Math.max(...Object.values(rel).flatMap((r) => [r.mae_yes || 0, r.mae_no || 0])) * 1.08, ticks = [0, 0.1, 0.2, 0.3, 0.4, 0.5].filter((t) => t <= hi), P = (v) => linPos(v, 0, hi);
+  const rows = el("div", "rows");
+  for (const k of D.relations.columns) {
+    const r = rel[k], d = el("div", "drow"); const l = el("div", "dl", RELNAMES[k]); l.append(el("small", null, pct(r.share, 1) + " of the added materials have one"));
+    const t = track(ticks, P);
+    if (r.mae_yes != null && r.mae_no != null) span(t, "link", P(r.mae_yes), P(r.mae_no));
+    if (r.mae_no != null) put(t, "dot hollow", P(r.mae_no), "without: " + f3(r.mae_no));
+    if (r.mae_yes != null) put(t, "dot", P(r.mae_yes), "with: " + f3(r.mae_yes));
+    const v = el("div", "dv"); v.innerHTML = `<b>${f3(r.mae_yes)}</b> / ${f3(r.mae_no)}`; d.append(l, t, v); rows.append(d);
+  }
+  host.append(rows); axis(host, ticks, P, "MAE (eV/atom): with / without");
+  const bars = $("dimBars"); bars.textContent = ""; const dims = P_.dimensionality, dhi = Math.max(...dims.map((x) => x.mae)) * 1.08, dt = [0, 0.1, 0.2, 0.3].filter((t) => t <= dhi), DP = (v) => linPos(v, 0, dhi);
+  const br = el("div", "rows");
+  for (const x of dims) {
+    const d = el("div", "drow"); const l = el("div", "dl", x.label === "na" ? "not assigned (na)" : x.label); l.append(el("small", null, x.n.toLocaleString("en") + " materials"));
+    const t = track(dt, DP); const bar = el("div", "bar"); bar.style.width = DP(x.mae) + "%"; t.append(bar);
+    const v = el("div", "dv"); v.innerHTML = `<b>${f3(x.mae)}</b>`; d.append(l, t, v); br.append(d);
+  }
+  bars.append(br); axis(bars, dt, DP, "MAE (eV/atom)");
+  const ic = P_.icsd, box = $("icsd"); box.textContent = ""; const g = el("div", "eldetail");
+  const card = (k, val, s, unit) => { const d = el("div", "ro"); const vv = el("div", "v num", val); if (unit) vv.append(el("small", null, " " + unit)); d.append(el("div", "k", k), vv); if (s) d.append(el("div", "s", s)); g.append(d); };
+  card("MAE with an ICSD id", f3(ic.mae_with), pct(ic.share_added, 1) + " of the added materials", "eV/atom");
+  card("MAE without", f3(ic.mae_without), "mostly hypothetical structures", "eV/atom");
+  card("Share in the 2021 training data", pct(ic.share_2021, 1), "against " + pct(ic.share_added, 1) + " of the added ones");
+  box.append(g, el("div", "note", "The added materials were chosen by the JARVIS project; many are hypothetical. This is a test of the next batch of a database, not of experimental discovery."));
+  box.lastChild.style.marginTop = "8px";
+}
+
+// =================================================================== tab: distance
+const hist = new Chart($("cHist"), { height: 300, m: { l: 46, r: 12, t: 10, b: 40 } });
+const binned = new Chart($("cBinned"), { height: 300, m: { l: 50, r: 12, t: 10, b: 40 } });
+function renderDistance() {
+  const E = D.distance.edges, on = distOn(), sets = Object.keys(D.distance.sets).filter((k) => on.has(k));
+  const hs = [], bs = []; let fmax = 0, mlo = Infinity, mhi = 0;
+  for (const k of sets) {
+    const s = D.distance.sets[k], pts = [];
+    s.fraction.forEach((f, i) => { pts.push([E[i], f], [E[i + 1], f]); fmax = Math.max(fmax, f); });
+    hs.push({ pts, color: SETS[k].color, name: SETS[k].label, width: 2, fmt: (v) => pct(v, 1) });
+    const bp = []; s.binned_mae.forEach((m, i) => { if (m != null) { bp.push([Math.sqrt(E[i] * E[i + 1]), m]); mlo = Math.min(mlo, m); mhi = Math.max(mhi, m); } });
+    bs.push({ pts: bp, color: SETS[k].color, name: SETS[k].label, width: 2, fmt: (v) => f3(v) });
+    bs.push({ kind: "points", pts: bp, color: SETS[k].color, r: 3, tip: false });
+  }
+  const xt = [0.02, 0.05, 0.1, 0.2, 0.5].filter((t) => t >= E[0] && t <= E[E.length - 1]);
+  hist.set({ aria: "Distance histogram", x: { min: E[0], max: E[E.length - 1], log: true, ticks: xt, label: "distance to the training set" }, y: { min: 0, max: Math.max(0.05, fmax * 1.08), label: "share of the test set", fmt: (v) => Math.round(100 * v) + " %" }, series: hs, tipTitle: (x) => "distance " + x.toFixed(3) });
+  if (!bs.length) { mlo = 0.05; mhi = 0.2; }
+  binned.set({ aria: "MAE against distance", x: { min: E[0], max: E[E.length - 1], log: true, ticks: xt, label: "distance to the training set" }, y: { min: Math.max(0.005, mlo * 0.85), max: mhi * 1.15, log: true, label: "MAE in the bin (eV/atom)" }, series: bs, tipTitle: (x) => "distance " + x.toFixed(3) });
+  const t = $("distTable"); t.textContent = ""; const hr = el("tr");
+  for (const h of ["Test set", "n", "median distance", "MAE", "Spearman (distance, error)", "top-10 % overlap", `MAE at distance ${D.distance.band[0]}–${D.distance.band[1]}`]) hr.append(el("th", null, h)); t.append(hr);
+  for (const [k, s] of Object.entries(D.distance.sets)) {
+    const tr = el("tr"); tr.append(el("td", "txt", SETS[k].label), el("td", null, s.n.toLocaleString("en")), el("td", null, f3(s.median)), el("td", null, f3(s.mae)), el("td", null, f2(s.spearman)), el("td", null, pct(s.top10)), el("td", null, `${f3(s.band_mae)} (${pct(s.band_share)})`)); t.append(tr);
+  }
+}
+
+// =================================================================== tab: checks
+function renderChecks() {
+  const t = $("checksTable"); t.textContent = ""; const hr = el("tr"); for (const h of ["Quantity", "This run", "Check", "Check from"]) hr.append(el("th", null, h)); t.append(hr);
+  for (const r of D.checks) { const tr = el("tr"); tr.append(el("td", "txt", r[0]), el("td", null, r[1]), el("td", null, r[2]), el("td", "txt", r[3])); tr.lastChild.style.textAlign = "left"; tr.firstChild.style.whiteSpace = "normal"; t.append(tr); }
+}
+
+// =================================================================== answers (text built from the data)
+function answers() {
+  const c = D.cv;
+  $("answerSplits").innerHTML = `<p>A random split tests on close relatives: ${pct(D.relations.rows.random[0])} of its test materials have a polymorph in the training set and ${pct(D.relations.rows.random[5])} a material of the same structure type. Holding those relatives out raises the error from <b>${f3(rnd)}</b> to <b>${f3(c["chemical-system groups"].mae)}</b> eV/atom (chemical systems) and <b>${f3(c["prototype groups"].mae)}</b> (structure types); R² barely moves (${f3(c.random.r2)} to ${f3(c["prototype groups"].r2)}).</p>`;
+  const hard = ranked.filter((e) => D.loeo[e].r2 < 0.8), withLi = loeoEls.filter((e) => D.loeo[e].li2024 != null);
+  const liHard = withLi.slice().sort((a, b) => D.loeo[a].li2024 - D.loeo[b].li2024).slice(0, hard.length);
+  const same = hard.length > 0 && hard.every((e) => liHard.includes(e));
+  const words = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  const nHard = hard.length < words.length ? words[hard.length] : String(hard.length);
+  $("answerElements").innerHTML = `<p>For most elements a model that never saw one of their compounds still does well (R² above 0.95 for ${pct(loeoEls.filter((e) => D.loeo[e].r2 > 0.95).length / loeoEls.length)} of ${loeoEls.length} elements). ${nHard[0].toUpperCase() + nHard.slice(1)} stand apart with R² below 0.8: <b>${hard.join(", ")}</b>. ${same ? `They are also the ${nHard} hardest elements of Li et al. (2024), with another model and a newer snapshot` : "Li et al. (2024), with another model and a newer snapshot, rank the elements in a similar order"} (Spearman correlation ${f2(D.loeo_spearman_li2024)}).</p>`;
+  const r = D.prospective.relations;
+  $("answerProspective").innerHTML = `<p>Trained on 2021 and tested on the ${D.about.n_added.toLocaleString("en")} materials JARVIS added later, the model reaches <b>${f3(D.prospective.mae)}</b> eV/atom, between the chemical-system and prototype splits. A polymorph in the training set helps (${f3(r.polymorph.mae_yes)} against ${f3(r.polymorph.mae_no)}); a material of the same prototype does not (${f3(r.prototype.mae_yes)} against ${f3(r.prototype.mae_no)}).</p>`;
+  const ds = D.distance.sets, sp = Object.values(ds).map((s) => s.spearman);
+  $("answerDistance").innerHTML = `<p>The error rises with the distance to the training set, but per material the link is weak (Spearman ${f2(Math.min(...sp))} to ${f2(Math.max(...sp))}). At the same distance (${D.distance.band[0]}–${D.distance.band[1]}), the random test set has an error of ${f3(ds.random.band_mae)} eV/atom, the leave-one-element-out set ${f3(ds["leave one element out"].band_mae)}: new elements and structure types are harder than their distance says.</p>`;
+}
+
+// =================================================================== update
+function update() {
+  for (const t of TABS) { const on = t === S.tab; $("t-" + t).setAttribute("aria-selected", String(on)); $("t-" + t).tabIndex = on ? 0 : -1; $("p-" + t).hidden = !on; }
+  for (const b of $("sets").querySelectorAll(".preset")) b.setAttribute("aria-pressed", String(b.dataset.set === S.set));
+  for (const b of $("segColor").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.v === S.color));
+  for (const c of $("distChecks").querySelectorAll("input")) c.checked = distOn().has(c.dataset.set);
+  $("elSel").value = S.el;
+  renderDotplot(); renderHeat(); renderParity(); renderPTable(); renderElement(); renderProspective(); renderDistance();
+  saveHash();
+}
+answers(); renderChecks(); update();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => update());
+</script>
