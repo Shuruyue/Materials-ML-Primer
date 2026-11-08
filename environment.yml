@@ -15,6 +15,7 @@ dependencies:
       - --extra-index-url https://download.pytorch.org/whl/cu132
       - torch
       - torch-geometric
+      - gpytorch
       - numpy
       - scipy
       - matplotlib
