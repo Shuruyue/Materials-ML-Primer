@@ -4,7 +4,8 @@ The default snapshot is JARVIS-DFT 2021.8.18 (``dft_3d_2021`` in jarvis-tools),
 the one used for the CFID, CGCNN and ALIGNN results in Choudhary & DeCost,
 npj Comput. Mater. 7, 185 (2021), so that results on it can be compared with
 theirs. Newer snapshots exist (``dft_3d_2022``, ``dft_3d``); their numbers are
-not comparable with that paper.
+not comparable with that paper. The newest one is used in the ``data_splits``
+experiment for the materials added after 2021.8.18.
 """
 
 from __future__ import annotations
@@ -19,6 +20,11 @@ import numpy as np
 
 DFT_3D_2021 = "dft_3d_2021"
 CFID_3D_2021 = "cfid_3d"
+# "dft_3d" is the newest snapshot that the installed jarvis-tools knows; with jarvis-tools 2026.6.12 it is
+# JARVIS-DFT 2025.9.24 (file jdft_3d-9-24-2025.json.zip, 93 902 materials). Newer jarvis-tools versions may
+# point it at a later snapshot, so code using it should check the number of records.
+DFT_3D_LATEST = "dft_3d"
+DFT_3D_LATEST_SIZE = 93902
 
 
 def download(name, data_dir):

@@ -11,7 +11,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
 authors = [{ name = "Shuruyue" }]
-dependencies = ["numpy>=1.26", "jarvis-tools"]
+dependencies = ["numpy>=1.26", "jarvis-tools", "spglib>=2.5"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pymatgen"]
@@ -19,6 +19,9 @@ notebooks = ["matplotlib", "scikit-learn>=1.6", "pymatgen", "jupyterlab", "ipyke
 
 [tool.setuptools]
 packages = ["materials_ml_primer"]
+
+[tool.setuptools.package-data]
+materials_ml_primer = ["wyckoff_sets.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
