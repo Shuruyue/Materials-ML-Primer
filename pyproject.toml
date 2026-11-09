@@ -21,7 +21,7 @@ notebooks = ["matplotlib", "scikit-learn>=1.6", "pymatgen", "jupyterlab", "ipyke
 packages = ["materials_ml_primer"]
 
 [tool.setuptools.package-data]
-materials_ml_primer = ["wyckoff_sets.json"]
+materials_ml_primer = ["wyckoff_sets.json", "cgcnn_atom_init.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
