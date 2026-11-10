@@ -70,11 +70,20 @@ def load():
     added = [rec for rec in latest if rec["jid"] not in old_ids]
     y = np.array([data.as_float(rec["formation_energy_peratom"]) for rec in records])
     y_add = np.array([data.as_float(rec["formation_energy_peratom"]) for rec in added])
+    check_targets(y, records, "2021.8.18")
+    check_targets(y_add, added, "added")
     X = np.hstack(descriptors.jarvis_feature_matrices(records))
     X_add = np.hstack(descriptors.jarvis_feature_matrices(added))
     system, proto = labels(records)
     return {"records": records, "added": added, "y": y, "y_add": y_add, "X": X, "X_add": X_add,
             "system": system, "proto": proto}
+
+
+def check_targets(y, records, part):
+    """Raise if a material of ``records`` has no formation energy (JARVIS's 'na', read as NaN)."""
+    missing = [rec["jid"] for rec, v in zip(records, y, strict=True) if not np.isfinite(v)]
+    if missing:
+        raise ValueError(f"{len(missing)} materials of the {part} records have no formation energy: {missing[:5]}")
 
 
 def labels(records):

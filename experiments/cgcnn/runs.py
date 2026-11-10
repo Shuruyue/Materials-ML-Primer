@@ -124,6 +124,8 @@ def load():
     d = {"records": records, "added": added, "system": system, "proto": proto,
          "y": np.array([data.as_float(rec["formation_energy_peratom"]) for rec in records]),
          "y_add": np.array([data.as_float(rec["formation_energy_peratom"]) for rec in added])}
+    uq.check_targets(d["y"], records, "2021.8.18")
+    uq.check_targets(d["y_add"], added, "added")
     d["graphs"], d["padded"], d["padded_per_crystal"] = graphs_of(records, "2021")
     d["graphs_add"], d["padded_add"], _ = graphs_of(added, "added")
     return d

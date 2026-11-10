@@ -1,5 +1,6 @@
 """Checks of the pretrained feature extractors. The models' weights are downloaded on first use (tens of MB each,
-cached by each package); a test is skipped if its package is not installed."""
+cached by each package); a test is skipped if its package is not installed. The tests that load a model are marked
+``needs_weights``: ``pytest -m "not needs_weights"`` runs the others (CI does)."""
 import importlib.util
 
 import numpy as np
@@ -11,6 +12,7 @@ from materials_ml_primer import pretrained
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 PACKAGE = {"mace-mp-0b3": "mace", "chgnet-0.3.0": "chgnet", "orb-v3-omat": "orb_models"}
 _loaded = {}
+needs_weights = pytest.mark.needs_weights
 
 
 def extractor(name):
@@ -40,6 +42,7 @@ def test_summary_is_mean_and_population_std():
     assert np.allclose(pretrained.summarize([a]), [[2.0, 4.0, 1.0, 2.0]])
 
 
+@needs_weights
 @pytest.mark.parametrize("name", list(pretrained.MODELS))
 def test_feature_dimension_is_the_documented_one(name):
     s, f, _ = features(name, [random_cell(0)])
@@ -47,6 +50,7 @@ def test_feature_dimension_is_the_documented_one(name):
     assert s.shape == (1, 2 * pretrained.MODELS[name]["dim"]) and np.isfinite(s).all()
 
 
+@needs_weights
 @pytest.mark.parametrize("name", list(pretrained.MODELS))
 def test_a_structure_gets_the_same_features_in_a_batch_and_alone(name):
     cells = [random_cell(k, n_atoms=3 + k) for k in range(4)]
@@ -55,6 +59,7 @@ def test_a_structure_gets_the_same_features_in_a_batch_and_alone(name):
     assert np.allclose(together, alone, rtol=0, atol=1e-4)
 
 
+@needs_weights
 @pytest.mark.parametrize("name", list(pretrained.MODELS))
 def test_features_ignore_atom_order_and_choice_of_cell(name):
     lattice, frac, species = random_cell(7)
@@ -77,6 +82,7 @@ def orthogonal(seed, proper):
     return q
 
 
+@needs_weights
 @pytest.mark.parametrize("proper", [True, False], ids=["rotation", "reflection"])
 @pytest.mark.parametrize("name", ["mace-mp-0b3", "chgnet-0.3.0"])
 def test_features_of_invariant_models_ignore_rotations_and_reflections(name, proper):
@@ -88,6 +94,7 @@ def test_features_of_invariant_models_ignore_rotations_and_reflections(name, pro
     assert np.abs(moved - ref).max() < 1e-4 * np.abs(ref).max()
 
 
+@needs_weights
 def test_orb_energy_is_nearly_rotation_invariant():
     # Orb is not equivariant by construction; it learns the symmetry from data. Its energy changes little under a
     # rotation, but some of its latent features change a lot (measured in the notebook), so only the energy is
@@ -99,6 +106,7 @@ def test_orb_energy_is_nearly_rotation_invariant():
     assert abs(e[1] - e[0]) < 5e-3
 
 
+@needs_weights
 def test_mace_features_are_the_calculators_descriptors_and_energy():
     ex = extractor("mace-mp-0b3")
     cell = random_cell(9)
@@ -109,6 +117,7 @@ def test_mace_features_are_the_calculators_descriptors_and_energy():
     assert e[0] == pytest.approx(atoms.get_potential_energy() / len(atoms), abs=1e-5)
 
 
+@needs_weights
 def test_chgnet_features_sum_to_its_crystal_feature_and_give_its_energy():
     from pymatgen.io.ase import AseAtomsAdaptor
 
@@ -121,6 +130,7 @@ def test_chgnet_features_sum_to_its_crystal_feature_and_give_its_energy():
     assert e[0] == pytest.approx(float(p["e"]), abs=1e-5)
 
 
+@needs_weights
 def test_chgnet_handles_an_atom_without_neighbors():
     # JARVIS has structures in which no atom has a neighbor within CHGNet's 6 A; such an atom keeps its embedding
     ex = extractor("chgnet-0.3.0")
@@ -131,6 +141,7 @@ def test_chgnet_handles_an_atom_without_neighbors():
     assert ex.isolated_atoms - before == 1
 
 
+@needs_weights
 def test_orb_batched_energy_is_the_calculators():
     from orb_models.forcefield.inference.calculator import ORBCalculator
 
