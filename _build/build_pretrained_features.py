@@ -41,8 +41,11 @@ Each model turns every atom into a vector, the one its energy readout reads; a s
 """)
 
 code(r"""
+import contextlib
 import importlib.util
+import io
 import json
+import logging
 import subprocess
 import sys
 import time
@@ -68,6 +71,21 @@ COLORS = {"descriptors": "0.45", "mace-mp-0b3": "C0", "chgnet-0.3.0": "C2", "orb
 plt.rcParams.update({"figure.dpi": 110, "savefig.dpi": 160, "font.size": 10})
 warnings.filterwarnings("ignore", category=UserWarning)
 summary = []
+
+
+@contextlib.contextmanager
+def quiet():
+    # The packages print loading messages, deprecation warnings and cache paths; keep only this notebook's output.
+    logging.disable(logging.CRITICAL)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), \
+                warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            yield
+    finally:
+        logging.disable(logging.NOTSET)
+
+
 print(f"torch {torch.__version__}, device {torch.cuda.get_device_name(0) if DEVICE == 'cuda' else 'cpu'}")
 """.replace("@QUICK@", str(QUICK)))
 
@@ -115,9 +133,12 @@ def source(rec):
 
 SRC = np.array([source(r) for r in d["records"]])
 SRC_ADD = np.array([source(r) for r in d["added"]])
-print(f"{'source of the starting structure':32s} {'2021 snapshot':>14s} {'added later':>12s}")
+has_icsd = np.array([bool(str(r.get("icsd", "")).strip()) for r in d["records"]])
+print(f"{'source of the starting structure':32s} {'2021 snapshot':>14s} {'with an ICSD entry':>19s} {'added later':>12s}")
 for s in ["Materials Project", "Materials Project (mvc)", "Alexandria", "AFLOW", "JQE (not documented)", "JARVIS", "other"]:
-    print(f"{s:32s} {np.sum(SRC == s):14d} {np.sum(SRC_ADD == s):12d}")
+    m = SRC == s
+    share = f"{has_icsd[m].mean():.0%}" if m.any() else "-"
+    print(f"{s:32s} {m.sum():14d} {share:>19s} {np.sum(SRC_ADD == s):12d}")
 """)
 
 md(r"""
@@ -151,46 +172,48 @@ def moved(kind, k, c):
     return pretrained.to_atoms(lat * [[2], [1], [1]], sup, list(sp) * 2)
 
 
-invariance = {}
+invariance, checks = {}, []
 for name in runs.MODELS:
     if QUICK:
         break
-    ex = pretrained.load(name, DEVICE)
-    with torch.no_grad():
-        f, e = ex(base[:30])
-    if name == "mace-mp-0b3":
-        check = max(float(np.abs(f[k] - ex.calc.get_descriptors(base[k])).max()) for k in range(30))
-        what = "largest difference from MACECalculator.get_descriptors"
-    elif name == "chgnet-0.3.0":
-        p = ex.model.predict_structure([AseAtomsAdaptor.get_structure(a) for a in base[:30]], task="e",
-                                       return_crystal_feas=True)
-        check = max(max(float(np.abs(f[k].sum(0) - p[k]["crystal_fea"]).max()), abs(float(p[k]["e"]) - e[k]))
-                    for k in range(30))
-        what = "largest difference from CHGNet's crystal feature (sum) and energy"
-    else:
-        from orb_models.forcefield.inference.calculator import ORBCalculator
+    with quiet():
+        ex = pretrained.load(name, DEVICE)
+        with torch.no_grad():
+            f, e = ex(base[:30])
+        if name == "mace-mp-0b3":
+            check = max(float(np.abs(f[k] - ex.calc.get_descriptors(base[k])).max()) for k in range(30))
+            what = "largest difference from MACECalculator.get_descriptors"
+        elif name == "chgnet-0.3.0":
+            p = ex.model.predict_structure([AseAtomsAdaptor.get_structure(a) for a in base[:30]], task="e",
+                                           return_crystal_feas=True)
+            check = max(max(float(np.abs(f[k].sum(0) - p[k]["crystal_fea"]).max()), abs(float(p[k]["e"]) - e[k]))
+                        for k in range(30))
+            what = "largest difference from CHGNet's crystal feature (sum) and energy"
+        else:
+            from orb_models.forcefield.inference.calculator import ORBCalculator
 
-        calc = ORBCalculator(ex.model, ex.adapter, device=DEVICE)
-        ref = []
-        for a in base[:30]:
-            b = a.copy()
-            b.calc = calc
-            ref.append(b.get_potential_energy() / len(b))
-        check = float(np.abs(ex.energy(base[:30]) - np.array(ref)).max())
-        what = "largest difference of the batched energy from ORBCalculator (eV/atom)"
-    print(f"{name}: {what}: {check:.1e}")
-    f0, _, _ = pretrained.featurize(ex, base)
-    spread = f0.std(axis=0) + 1e-12
-    for kind in ("atom order", "supercell", "rotation", "reflection"):
-        f1, _, _ = pretrained.featurize(ex, [moved(kind, k, c) for k, c in enumerate(cells)])
-        rel = np.abs(f1 - f0) / spread
-        invariance[(name, kind)] = (float(np.median(rel)), float(np.percentile(rel, 99)), float(rel.max()))
-    if name == "orb-v3-omat":
-        e0 = ex.energy(base)
-        e1 = ex.energy([moved("rotation", k, c) for k, c in enumerate(cells)])
-        orb_energy_change = float(np.abs(e1 - e0).max())
-    del ex
-    torch.cuda.empty_cache()
+            calc = ORBCalculator(ex.model, ex.adapter, device=DEVICE)
+            ref = []
+            for a in base[:30]:
+                b = a.copy()
+                b.calc = calc
+                ref.append(b.get_potential_energy() / len(b))
+            check = float(np.abs(ex.energy(base[:30]) - np.array(ref)).max())
+            what = "largest difference of the batched energy from ORBCalculator (eV/atom)"
+        checks.append(f"{name}: {what}: {check:.1e}")
+        f0, _, _ = pretrained.featurize(ex, base)
+        spread = f0.std(axis=0) + 1e-12
+        for kind in ("atom order", "supercell", "rotation", "reflection"):
+            f1, _, _ = pretrained.featurize(ex, [moved(kind, k, c) for k, c in enumerate(cells)])
+            rel = np.abs(f1 - f0) / spread
+            invariance[(name, kind)] = (float(np.median(rel)), float(np.percentile(rel, 99)), float(rel.max()))
+        if name == "orb-v3-omat":
+            e0 = ex.energy(base)
+            e1 = ex.energy([moved("rotation", k, c) for k, c in enumerate(cells)])
+            orb_energy_change = float(np.abs(e1 - e0).max())
+        del ex
+        torch.cuda.empty_cache()
+print("\n".join(checks))
 print(f"\n{'model':14s} {'change':12s} {'median':>9s} {'99th pct':>9s} {'largest':>9s}   (feature change / spread between materials)")
 for (name, kind), v in invariance.items():
     print(f"{name:14s} {kind:12s} {v[0]:9.1e} {v[1]:9.1e} {v[2]:9.1e}")
@@ -231,11 +254,15 @@ for t in TASKS:
         r["mu"][v], r["sd"][v] = res[0]["test_mu"], res[0]["test_sd"]
         r["cal_mu"][v], r["cal_sd"][v] = res[0]["cal_mu"], res[0]["cal_sd"]
         r.setdefault("seconds", {})[v] = float(res[0]["seconds"])
+        r.setdefault("iterations", {})[v] = res[0]["iterations"]
     R[t.key] = r
 print(dict(counts), f"tasks: {len(R)}; descriptor results missing: {missing_desc[:5]}")
 METHODS = ["descriptors"] + [v for v in runs.MODELS if all(v in r["mu"] for r in R.values())]
 for v in METHODS[1:]:
-    print(f"{v}: fitting time {sum(r['seconds'][v] for r in R.values()) / 3600:.1f} h")
+    its = np.concatenate([r["iterations"][v] for r in R.values()])
+    print(f"{v}: fitting time {sum(r['seconds'][v] for r in R.values()) / 3600:.1f} h (four processes at a time); "
+          f"ensemble members that reached the limit of {runs.FIT_SETTINGS['max_iter']} iterations: "
+          f"{np.mean(its >= runs.FIT_SETTINGS['max_iter']):.0%}")
 """)
 
 code(r"""
@@ -298,6 +325,30 @@ for m in METHODS[1:]:
           f"Spearman of R2 with the descriptors' {stats.spearmanr(r2_el[m], r2_el['descriptors']).statistic:.2f}")
     summary.append((f"leave one element out, {NAMES[m]}: elements with lower MAE than the descriptors",
                     f"{better} of {len(elements)}", "", "this repository"))
+""")
+
+md(r"""
+The twelve elements of the `cgcnn` experiment, with CGCNN trained from scratch on the same materials: MAE and bias (mean of prediction minus DFT) of each ensemble.
+""")
+
+code(r"""
+cg_el = {row["element"]: row for row in cg["elements"]}
+same_hgb = all(abs(cg_el[e]["mae_hgb"] - mae_el["descriptors"][elements.index(e)]) < 1e-9 for e in cg_el)
+print(f"descriptor results identical to those used in cgcnn: {same_hgb}")
+cols = METHODS + ["CGCNN"]
+print(f"{'element':>7s} " + " ".join(f"{(NAMES.get(m, m)):>18s}" for m in cols) + "    bias: " + " / ".join(NAMES.get(m, m) for m in cols))
+table12 = {m: [] for m in cols}
+for e in cg_el:
+    i = elements.index(e)
+    maes = [mae_el[m][i] for m in METHODS] + [cg_el[e]["mae_cgcnn"]]
+    bias = [float(np.mean(EL[e]["mu"][m] - EL[e]["y_test"])) for m in METHODS] + [cg_el[e]["bias_cgcnn"]]
+    for m, v in zip(cols, maes, strict=True):
+        table12[m].append(v)
+    print(f"{e:>7s} " + " ".join(f"{v:18.3f}" for v in maes) + "    " + " / ".join(f"{b:+.2f}" for b in bias))
+print(f"{'mean':>7s} " + " ".join(f"{np.mean(table12[m]):18.3f}" for m in cols))
+for m in cols:
+    summary.append((f"leave one element out, mean MAE over the 12 elements of cgcnn, {NAMES.get(m, m)}",
+                    f"{np.mean(table12[m]):.3f}", "", "this repository"))
 """)
 
 code(r"""
@@ -437,6 +488,7 @@ export = {
     "mae": mae_table,
     "elements": [{"element": e, "n": len(EL[e]["y_test"]), **{f"r2_{m}": float(r2_el[m][i]) for m in METHODS},
                   **{f"mae_{m}": float(mae_el[m][i]) for m in METHODS}} for i, e in enumerate(elements)],
+    "cgcnn_elements": {"elements": list(cg_el), "mae": {NAMES.get(m, m): [float(x) for x in v] for m, v in table12.items()}},
     "seen_in_pretraining": [dict(zip(("split", "model", "group", "n", "ratio", "lo", "hi"), row, strict=True))
                             for row in seen_rows],
     "rotation": [dict(zip(("task", "mae_stored", "mae_rotated"), row, strict=True)) for row in rot_rows],
@@ -453,7 +505,19 @@ print("written pretrained_features_results.json")
 md(r"""
 ## Discussion
 
-To be written when the results are in.
+**The features are the models' own.** They agree with each package's outputs (MACE's descriptors, CHGNet's crystal feature and energy, Orb's calculator energy) to float32 rounding. MACE's and CHGNet's features are invariant to atom order, cell choice, rotations and reflections; Orb's to order and cell, but not to rotations: at the 99th percentile a rotation changes a feature by 0.41 of its spread between materials, by up to 2.8 times, while Orb's energy changes by at most 5 × 10⁻⁴ eV/atom. Fitted again with every structure turned, six test sets changed their MAE by 0.2–3 % (predictions correlated at 0.992 or more), so the orientation in which JARVIS stores the structures does not drive the results.
+
+**Frozen features beat the descriptors, but not a network trained on the task.** With the same gradient-boosting ensemble, the features of all three models beat the 150 descriptors on every fold of every cross-validation and on the prospective test (except one chemical-system fold for MACE): 4–14 % lower MAE on the random split and 29–39 % lower on new structure types, where the loss under shift falls from 1.79 times the random-split MAE to 1.28–1.39 times. CGCNN trained from scratch on the same materials is better still on all these splits (0.056 eV/atom random, 0.084 on new structure types, against 0.075–0.084 and 0.096–0.111): a representation pretrained for energies and forces, read by gradient boosting, leaves much of what end-to-end training on the target gets.
+
+**With an element held out, pretraining helps on average, not uniformly.** Over all 78 held-out elements the mean MAE falls from 0.160 to 0.137–0.148 eV/atom, and the features are better on 48 (MACE), 54 (CHGNet) and 61 (Orb) of the 78. On the 12 elements of the `cgcnn` experiment the features of MACE and CHGNet beat both the descriptors and CGCNN (mean MAE 0.258 and 0.281 against 0.303 and 0.382). Fluorides gain the most: R² 0.11 rises to 0.29, 0.53 and 0.68, and the MAE falls from 0.75 to 0.70, 0.55 and 0.45 eV/atom (CGCNN: 1.24). But no feature set is better everywhere. Hydrides are predicted far better with MACE's and Orb's features (R² 0.94 and 0.90 against 0.66) and worse with CHGNet's (0.47); oxides fail with Orb's features (R² −0.93, all overestimated by 1.17 eV/atom on average) although Orb was pretrained on oxides; beryllium and carbon compounds are predicted worse by all three. The hard elements stay hard: the per-element R² of the features ranks the elements like that of the descriptors (Spearman 0.77–0.81).
+
+**The gain of the MPtrj models sits on Materials Project structures.** For MACE-MP-0b3 the features beat the descriptors on test materials whose starting structure came from Materials Project (MAE ratio 0.91 on the random split, 0.85 with elements held out, 0.84 on the materials added later) and hardly or not at all on the others (1.06, 0.99, 0.96); CHGNet shows the same direction, less strongly (0.84 against 0.89, 0.91 against 0.99, 0.85 against 0.89). The structure-type split goes the other way, and Orb, pretrained on data derived from Alexandria, is worse than the descriptors on the Alexandria-sourced materials added after 2021 (1.10 against 0.88 for the others). So much of what the MPtrj models add for an unseen element is added for compounds whose structures, and possibly whose PBE energies, were in their pretraining data. The source labels cannot tell memorization from a better coverage of Materials-Project-like chemistry, because the groups differ in what they hold: 43 % of the Materials-Project-sourced materials of the 2021 snapshot have an ICSD entry (an experimentally reported compound), none of the materials from the other sources do.
+
+**The uncertainty does not improve.** The spread of the five gradient-boosting models ranks the errors slightly worse on the features than on the descriptors (median Spearman 0.43–0.50 against 0.49–0.54 on the random and prospective test sets, 0.37–0.41 against 0.46–0.47 on the group splits, 0.24–0.26 against 0.27 with an element held out), and conformal intervals scaled by it cover about the same.
+
+**Caveats.** The models are used frozen, with gradient boosting on the mean and standard deviation of their last-layer atom features; fine-tuning, a neural readout or other layers might do better. One checkpoint of each model was used, and the downstream models were not tuned. Whether a test compound is in a pretraining set is inferred from where JARVIS took its structure, not checked against MPtrj or OMat24.
+
+Pretraining on every element narrows the gap that `cgcnn` found for unseen elements, most clearly for fluorides and hydrides, but it is not a general fix: which elements improve depends on the model, one model fails badly on oxides, and for the MPtrj models the gain concentrates on compounds that come from their own pretraining source.
 """)
 
 nb = nbf.v4.new_notebook()
