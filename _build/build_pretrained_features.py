@@ -110,13 +110,13 @@ print(f"{len(d['y'])} materials (2021.8.18) and {len(d['y_add'])} added up to 20
       f"({time.perf_counter() - t0:.0f} s)")
 FEAT = {}
 for v in runs.VARIANTS:
-    parts = [runs.features(d, v, part, compute=not QUICK, device=DEVICE, log=lambda m: None) for part in ("2021", "added")]
+    parts = [runs.features(d, v, part, compute=not QUICK, device=DEVICE, log=lambda m: None) for part in runs.parts(v)]
     if any(p is None for p in parts):
         print(f"{v}: features not computed")
         continue
     FEAT[v] = parts
     X = np.vstack([p["X"] for p in parts])
-    iso = int(parts[0]["isolated_atoms"]) + int(parts[1]["isolated_atoms"]) if "chgnet" in v else None
+    iso = sum(int(p["isolated_atoms"]) for p in parts) if "chgnet" in v else None
     print(f"{v:22s} {X.shape[1]:4d} features, {sum(float(p['seconds']) for p in parts) / 60:5.1f} min on the GPU, "
           f"non-finite values: {int((~np.isfinite(X)).sum())}" + (f", atoms without a neighbor within 6 Å: {iso}" if iso is not None else ""))
 """)
@@ -247,7 +247,7 @@ for t in TASKS:
     for v in runs.MODELS:
         if v not in FEAT:
             continue
-        res = runs.fit(d, v, t, FEAT[v][0]["X"], FEAT[v][1]["X"], compute=not QUICK)
+        res = runs.fit(d, v, t, FEAT[v], compute=not QUICK)
         if res is None:
             continue
         counts[res[1]] += 1
@@ -436,8 +436,7 @@ rot_rows = []
 if "orb-v3-omat-rotated" in FEAT:
     print(f"{'test set':12s} {'MAE, stored orientation':>24s} {'MAE, rotated':>13s} {'correlation of predictions':>27s}")
     for t in runs.tasks(d, "orb-v3-omat-rotated"):
-        res = runs.fit(d, "orb-v3-omat-rotated", t, FEAT["orb-v3-omat-rotated"][0]["X"],
-                       FEAT["orb-v3-omat-rotated"][1]["X"], compute=not QUICK)
+        res = runs.fit(d, "orb-v3-omat-rotated", t, FEAT["orb-v3-omat-rotated"], compute=not QUICK)
         if res is None or t.key not in R or "orb-v3-omat" not in R[t.key]["mu"]:
             continue
         r = R[t.key]

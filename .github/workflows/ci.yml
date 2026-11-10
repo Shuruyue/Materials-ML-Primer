@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # CPU build of PyTorch (the GPU build is several GB); the tests that load the pretrained models download
+      # their weights and are deselected below (marker needs_weights)
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]" scikit-learn gpytorch ruff
+      - name: Lint
+        run: ruff check .
+      - name: Tests
+        run: pytest -q -m "not needs_weights"

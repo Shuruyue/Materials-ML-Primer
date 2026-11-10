@@ -25,6 +25,7 @@ materials_ml_primer = ["wyckoff_sets.json", "cgcnn_atom_init.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["needs_weights: loads a pretrained model, whose weights are downloaded on first use (tens of MB)"]
 
 [tool.ruff]
 line-length = 120
