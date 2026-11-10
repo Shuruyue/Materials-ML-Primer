@@ -28,3 +28,8 @@ dependencies:
       - ipykernel
       - nbconvert
       - pytest
+      # pretrained_features: three universal interatomic potentials used as feature extractors
+      # (mace-torch pins e3nn 0.4.4; none of the three changes the torch version)
+      - mace-torch==0.3.17
+      - chgnet==0.4.2
+      - orb-models==0.7.0
