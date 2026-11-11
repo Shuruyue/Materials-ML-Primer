@@ -1,0 +1,5 @@
+# Generated files: executed notebooks, their HTML exports and the built interactive pages are rebuilt by the
+# scripts in _build/, so they are collapsed in diffs and left out of GitHub's language statistics.
+experiments/**/*.ipynb linguist-generated
+experiments/**/*.html linguist-generated
+web/*.html linguist-generated
