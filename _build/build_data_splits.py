@@ -391,12 +391,20 @@ ours = np.array([r2s[e] for e in common])
 theirs = np.array([LI2024_XGB_JARVIS[e] for e in common])
 rho = spearmanr(ours, theirs).statistic
 print(f"elements in both: {len(common)}; Spearman correlation of R²: {rho:.2f}")
+# R² divides each element's error by the spread of its compounds' formation energies, which both studies take from
+# JARVIS; the MAE does not, so its correlation shows how much of the agreement is that shared denominator
+ours_mae = np.array([loeo[e]["mae"] for e in common])
+rho_mae = spearmanr(ours_mae, theirs).statistic
+print(f"Spearman correlation of our MAE with their R²: {rho_mae:.2f} (with our own R²: "
+      f"{spearmanr(ours_mae, ours).statistic:.2f})")
 print(f"R² > 0.95: this run {np.mean(ours > 0.95):.0%}, Li et al. {np.mean(theirs > 0.95):.0%} (same elements)")
 print("six worst, this run:  ", ", ".join(f"{e} {r2s[e]:.2f}" for e in sorted(common, key=r2s.get)[:6]))
 print("six worst, Li et al.: ", ", ".join(f"{e} {LI2024_XGB_JARVIS[e]:.2f}"
                                           for e in sorted(common, key=LI2024_XGB_JARVIS.get)[:6]))
 summary.append(("leave one element out: Spearman correlation of R² per element with Li et al.",
                 f"{rho:.2f} ({len(common)} elements)", "high", "Li et al. 2024, XGB on JARVIS 2022.12.12"))
+summary.append(("leave one element out: Spearman correlation of our MAE per element with their R²",
+                f"{rho_mae:.2f}", "negative", "Li et al. 2024, XGB on JARVIS 2022.12.12"))
 summary.append(("leave one element out: elements with R² > 0.95", f"{np.mean(ours > 0.95):.0%}",
                 f"{np.mean(theirs > 0.95):.0%}", "Li et al. 2024, same elements"))
 summary.append(("leave one element out: the six elements with the lowest R²",
@@ -664,7 +672,7 @@ md(r"""
 
 **How much a random split flatters the model depends on what is held out.** Holding out polymorphs together raises the test MAE from 0.076 to 0.094 eV/atom, whole chemical systems to 0.097 and whole structure prototypes to 0.145. The chemical-system split costs little more than the formula split because it does not test new chemistry: 75 % of its test materials still have one of their subsystems in the training set. The prototype split costs most, and its folds differ most (standard deviation 0.035 eV/atom): each fold holds other structure families, some of them large (the largest, the full-Heusler type, holds 4084 of the 93 902 materials of both snapshots). R² hides most of the difference (0.983 against 0.947), because the formation energies vary far more than the errors.
 
-**Unseen elements.** For most elements, a model that has never seen one of their compounds still predicts them well (R² > 0.95 for 62 % of the 78 elements), because the composition features describe an element by its properties, not by its name. Six elements stand apart: F, N, H, O, Be and C. Li et al. (2024) found the same six with another model, other descriptors and a newer snapshot, and the two studies rank the elements alike (Spearman correlation 0.95), so the difficulty lies mainly in the elements and the data. The sign of the bias fits a simple picture in which the model predicts the compounds of an unseen element like those of the most similar elements it has seen: fluorides, which are more stable than chlorides and oxides, are predicted 0.79 eV/atom too unstable on average, and nitrides, which are less stable than oxides, 0.45 eV/atom too stable. This picture is not tested here.
+**Unseen elements.** For most elements, a model that has never seen one of their compounds still predicts them well (R² > 0.95 for 62 % of the 78 elements), because the composition features describe an element by its properties, not by its name. Six elements stand apart: F, N, H, O, Be and C. Li et al. (2024) found the same six with another model, other descriptors and a newer snapshot, and the two studies rank the elements alike (Spearman correlation 0.95), so the difficulty lies mainly in the elements and the data. Part of this agreement is shared by construction: R² divides an element's error by the spread of its compounds' formation energies, and both studies take those from JARVIS. Our MAE, which has no such denominator, correlates less with their R² (Spearman −0.77; with our own R², −0.87). The sign of the bias fits a simple picture in which the model predicts the compounds of an unseen element like those of the most similar elements it has seen: fluorides, which are more stable than chlorides and oxides, are predicted 0.79 eV/atom too unstable on average, and nitrides, which are less stable than oxides, 0.45 eV/atom too stable. This picture is not tested here.
 
 **The next batch of the database.** The materials JARVIS added after 2021 are predicted with 0.109 eV/atom, between the chemical-system and the prototype splits. The kind of material matters more than its relatives in the training set: 0.091 eV/atom for 3D bulk materials, 0.118 for the intercalated-ion structures and 0.16 to 0.21 for low-dimensional ones; materials with an experimental structure (an ICSD id), only 5.6 % of the added set against 33.5 % of the 2021 snapshot, are predicted with 0.075 eV/atom, the others with 0.111. A polymorph in the training set helps (0.068 against 0.121), a material of the same prototype does not (0.109 either way), and the 1.5 % of materials without any related chemical system have four times the error of the rest (0.419 eV/atom).
 

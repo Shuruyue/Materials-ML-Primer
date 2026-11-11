@@ -58,7 +58,7 @@ import torch
 from scipy import stats
 
 import runs
-from materials_ml_primer import data, pretrained
+from materials_ml_primer import data, pretrained, splits
 from materials_ml_primer import uncertainty as uq
 
 QUICK = @QUICK@       # True only in a test run of this notebook: use the cache, compute nothing
@@ -133,6 +133,9 @@ def source(rec):
 
 SRC = np.array([source(r) for r in d["records"]])
 SRC_ADD = np.array([source(r) for r in d["added"]])
+# chemical system of every material: the unit of the cluster bootstrap in sections 4 and 5
+SYS = np.array(d["system"])
+SYS_ADD = np.array(["-".join(splits.chemical_system(data.structure_arrays(r["atoms"])[2])) for r in d["added"]])
 has_icsd = np.array([bool(str(r.get("icsd", "")).strip()) for r in d["records"]])
 print(f"{'source of the starting structure':32s} {'2021 snapshot':>14s} {'with an ICSD entry':>19s} {'added later':>12s}")
 for s in ["Materials Project", "Materials Project (mvc)", "Alexandria", "AFLOW", "JQE (not documented)", "JARVIS", "other"]:
@@ -229,6 +232,8 @@ MACE and CHGNet are invariant by construction, and their features change only at
 ## 3. Accuracy under distribution shift
 
 Expected: on the random split the pretrained features should be at least as good as the descriptors (they were pretrained on energies); if pretraining covers the chemistry that the JARVIS training set lacks, the gain should be largest when an element is held out.
+
+The MAE of a split is the mean over its test sets. The last column is the ensemble of five CGCNNs of the `cgcnn` experiment on the same test sets. That experiment held out only 12 of the 78 elements, so its leave-one-element-out MAE stands in a separate row averaged over those 12 elements (element by element further below); the row of all 78 has no CGCNN value.
 """)
 
 code(r"""
@@ -241,7 +246,7 @@ for t in TASKS:
         continue
     r = {"key": t.key, "split": t.split, "test": t.test, "added": t.added, "y_cal": d["y"][t.cal],
          "y_test": (d["y_add"] if t.added else d["y"])[t.test],
-         "src": (SRC_ADD if t.added else SRC)[t.test],
+         "src": (SRC_ADD if t.added else SRC)[t.test], "sys": (SYS_ADD if t.added else SYS)[t.test],
          "mu": {"descriptors": desc[t.key][0]["test_mu_ens"]}, "sd": {"descriptors": desc[t.key][0]["test_sd_ens"]},
          "cal_mu": {"descriptors": desc[t.key][0]["cal_mu_ens"]}, "cal_sd": {"descriptors": desc[t.key][0]["cal_sd_ens"]}}
     for v in runs.MODELS:
@@ -276,26 +281,101 @@ def r2(r, m):
 
 
 cg = json.loads((runs.HERE.parent / "cgcnn" / "cgcnn_results.json").read_text(encoding="utf-8"))
+# CGCNN held out only 12 elements: its leave-one-element-out MAE is compared on those 12, not on all 78
+LOEO, LOEO12 = "leave one element out", "leave one element out, CGCNN's 12"
+CG_ELEMENTS = [e["element"] for e in cg["elements"]]
+ROWS = SPLITS[:4] + [LOEO12] + SPLITS[4:]
+
+
+def rows_of(split):
+    if split == LOEO12:
+        return [R[f"element-{e}"] for e in CG_ELEMENTS if f"element-{e}" in R]
+    return [r for r in R.values() if r["split"] == split]
+
+
+def cgcnn_mae(split, method="CGCNN (ensemble of 5)"):
+    if split == LOEO:
+        return np.nan
+    return cg["mae"].get(LOEO if split == LOEO12 else split, {}).get(method, [np.nan])[0]
+
+
 mae_table = {}
-print(f"{'split':24s} {'tasks':>5s} " + " ".join(f"{NAMES[m]:>18s}" for m in METHODS) + f" {'CGCNN ens.':>11s}")
-for split in SPLITS:
-    rs = [r for r in R.values() if r["split"] == split]
+print(f"{'split':34s} {'tasks':>5s} " + " ".join(f"{NAMES[m]:>18s}" for m in METHODS) + f" {'CGCNN ens.':>11s}")
+for split in ROWS:
+    rs = rows_of(split)
     mae_table[split] = {m: float(np.mean([mae(r, m) for r in rs])) for m in METHODS}
-    cgv = cg["mae"].get(split, {}).get("CGCNN (ensemble of 5)", [np.nan])[0]
-    print(f"{split:24s} {len(rs):5d} " + " ".join(f"{mae_table[split][m]:18.4f}" for m in METHODS)
-          + f" {cgv:11.4f}" + ("  (12 elements)" if split == "leave one element out" else ""))
+    print(f"{split:34s} {len(rs):5d} " + " ".join(f"{mae_table[split][m]:18.4f}" for m in METHODS)
+          + f" {cgcnn_mae(split):11.4f}")
+# the descriptor model is the "HGB (ensemble of 5)" of the cgcnn experiment: same predictions, same MAE
+hgb_check = {s: (mae_table[s]["descriptors"], cgcnn_mae(s, "HGB (ensemble of 5)")) for s in ROWS if s != LOEO}
+print("descriptors here vs HGB in cgcnn_results.json: "
+      + ", ".join(f"{s} {a:.4f} / {b:.4f}" for s, (a, b) in hgb_check.items()))
 print("\nMAE relative to the random split:")
-for split in SPLITS:
-    print(f"  {split:24s} " + "  ".join(f"{NAMES[m]} {mae_table[split][m] / mae_table['random'][m]:.2f}" for m in METHODS))
+for split in ROWS:
+    print(f"  {split:34s} " + "  ".join(f"{NAMES[m]} {mae_table[split][m] / mae_table['random'][m]:.2f}" for m in METHODS))
 print("\ntest sets on which the features beat the descriptors:")
-for split in SPLITS:
-    rs = [r for r in R.values() if r["split"] == split]
-    print(f"  {split:24s} " + "  ".join(f"{NAMES[m]} {sum(mae(r, m) < mae(r, 'descriptors') for r in rs)} of {len(rs)}"
+for split in ROWS:
+    rs = rows_of(split)
+    print(f"  {split:34s} " + "  ".join(f"{NAMES[m]} {sum(mae(r, m) < mae(r, 'descriptors') for r in rs)} of {len(rs)}"
                                        for m in METHODS[1:]))
 for m in METHODS[1:]:
     summary.append((f"MAE random split, {NAMES[m]} features (descriptors {mae_table['random']['descriptors']:.3f})",
                     f"{mae_table['random'][m]:.4f}", f"CGCNN {cg['mae']['random']['CGCNN (ensemble of 5)'][0]:.4f}",
                     "this repository"))
+""")
+
+md(r"""
+### The pretrained energy itself
+
+The three models were pretrained to predict the DFT energy, and their energy per atom was computed with the features. A formation energy is an energy per atom minus composition-weighted reference energies of the elements, so a linear model $y \approx a E + \sum_i c_i x_i$ ($E$: the model's energy per atom, $x_i$: the atomic fraction of element $i$), fitted by least squares on the training materials of each test set, turns the predicted energy into a formation energy with one correction per element. The corrections also absorb what is systematic per element in the difference between the pretraining data (PBE, and PBE+U for oxides and fluorides of some transition metals) and JARVIS (OptB88vdW). If this baseline comes close to gradient boosting on the features, what the features add is mostly the energy the model learned; if it is far behind, the features carry more than the energy. With an element held out the correction of that element has no training data, so that split is left out; materials of the other splits with an element that no training material has are kept and counted.
+""")
+
+code(r"""
+ELEMENTS = sorted({s for recs in (d["records"], d["added"]) for rec in recs for s in data.structure_arrays(rec["atoms"])[2]})
+COL = {e: i for i, e in enumerate(ELEMENTS)}
+
+
+def fractions(records):
+    F = np.zeros((len(records), len(ELEMENTS)))
+    for i, rec in enumerate(records):
+        for s, n in data.composition(data.structure_arrays(rec["atoms"])[2]).items():
+            F[i, COL[s]] = n
+    return F / F.sum(axis=1, keepdims=True)
+
+
+def energy_baseline(E_train, F_train, y_train, E_test, F_test):
+    # least squares of y on [E, fractions]; the fractions sum to one, so they hold the intercept
+    ok = np.isfinite(E_train)
+    coef = np.linalg.lstsq(np.column_stack([E_train[ok], F_train[ok]]), y_train[ok], rcond=None)[0]
+    return np.column_stack([E_test, F_test]) @ coef
+
+
+FRAC, FRAC_ADD = fractions(d["records"]), fractions(d["added"])
+E_METHODS = METHODS[1:]
+E_ROWS = [s for s in ROWS if s not in (LOEO, LOEO12)]
+for t in TASKS:
+    if t.split == LOEO or t.key not in R:
+        continue
+    r = R[t.key]
+    F_test = (FRAC_ADD if t.added else FRAC)[t.test]
+    r["unseen_element"] = int((F_test[:, FRAC[t.train].sum(axis=0) == 0] > 0).any(axis=1).sum())
+    for m in E_METHODS:
+        E, E_add = FEAT[m][0]["energy"], FEAT[m][1]["energy"]
+        r.setdefault("energy_mu", {})[m] = energy_baseline(E[t.train], FRAC[t.train], d["y"][t.train],
+                                                           (E_add if t.added else E)[t.test], F_test)
+energy_table = {}
+print(f"{'split':24s} {'materials with an element':>26s}  MAE, energy baseline / features")
+for split in E_ROWS:
+    rs = rows_of(split)
+    energy_table[split] = {m: float(np.mean([np.nanmean(np.abs(r["energy_mu"][m] - r["y_test"])) for r in rs]))
+                           for m in E_METHODS}
+    print(f"{split:24s} {sum(r['unseen_element'] for r in rs):19d} unseen  "
+          + "  ".join(f"{NAMES[m]} {energy_table[split][m]:.4f} / {mae_table[split][m]:.4f}" for m in E_METHODS))
+bad = {m: int((~np.isfinite(np.concatenate([FEAT[m][0]["energy"], FEAT[m][1]["energy"]]))).sum()) for m in E_METHODS}
+print(f"non-finite energies (left out of the fits; their predictions are skipped): {bad}")
+for m in E_METHODS:
+    summary.append((f"MAE random split, {NAMES[m]} energy + one correction per element",
+                    f"{energy_table['random'][m]:.4f}", f"features {mae_table['random'][m]:.4f}", "this notebook"))
 """)
 
 md(r"""
@@ -373,52 +453,74 @@ plt.show()
 md(r"""
 ## 4. Seen during pretraining?
 
-If the features help because the pretrained model has seen the test compounds themselves, the gain over the descriptors should be larger for test materials whose structure came from the pretraining source (Materials Project for MACE and CHGNet, Alexandria for Orb) than for the others. The test materials of a split are therefore divided by source, and for each group the MAE of the features is divided by the MAE of the descriptors on the same materials; a 95 % interval comes from resampling the materials of the group. The groups differ in more than their source (AFLOW and JARVIS's own structures are often hypothetical or two-dimensional), which is why the comparison is a ratio to the descriptors within each group rather than an MAE.
+If the features help because the pretrained model has seen the test compounds themselves, the gain over the descriptors should be larger for test materials whose structure came from the pretraining source (Materials Project for MACE and CHGNet, Alexandria for Orb) than for the others. The test materials of a split are therefore divided by source, and for each group the MAE of the features is divided by the MAE of the descriptors on the same materials. The groups differ in more than their source (AFLOW and JARVIS's own structures are often hypothetical or two-dimensional), which is why the comparison is a ratio to the descriptors within each group rather than an MAE.
+
+The 95 % interval comes from a cluster bootstrap: whole chemical systems are drawn with replacement, not single materials. Materials of one chemical system share much of their error, and with an element held out a compound is in the test set of each of its elements; resampling single materials treats all of them as independent and gives intervals that are too narrow (printed for comparison).
+
+The source is a proxy for "seen", and it errs in one direction. A structure taken from AFLOW or from JARVIS itself may also be in the Materials Project, and Alexandria contains many structures derived from the Materials Project, so the group "from other sources" holds materials that the model has seen, Orb's most of all. This makes the two groups more alike: a difference found here understates the real one, and no difference does not rule out that having seen a compound helps. Materials Project entries with `mvc-` identifiers form a group of their own, because whether they are in MPtrj is not known. Groups of fewer than 100 materials are not shown.
 """)
 
 code(r"""
-GROUPS = {"mace-mp-0b3": "Materials Project", "chgnet-0.3.0": "Materials Project", "orb-v3-omat": "Alexandria"}
+SEEN = {"mace-mp-0b3": "Materials Project", "chgnet-0.3.0": "Materials Project", "orb-v3-omat": "Alexandria"}
+MVC = "Materials Project (mvc)"
 
 
-def ratio_ci(err_f, err_d, n_boot=2000, seed=0):
-    idx = np.random.default_rng(seed).integers(0, len(err_f), (n_boot, len(err_f)))
-    boot = err_f[idx].mean(axis=1) / err_d[idx].mean(axis=1)
-    return err_f.mean() / err_d.mean(), np.percentile(boot, 2.5), np.percentile(boot, 97.5)
+def cluster_ci(num, den, clusters, n_boot=2000, seed=0):
+    # sum(num) / sum(den) with a 95 % interval from drawing whole clusters with replacement
+    _, inv = np.unique(clusters, return_inverse=True)
+    s_num, s_den = np.bincount(inv, weights=num), np.bincount(inv, weights=den)
+    rng = np.random.default_rng(seed)
+    boot = np.empty(n_boot)
+    for start in range(0, n_boot, 100):
+        idx = rng.integers(0, len(s_num), (min(100, n_boot - start), len(s_num)))
+        boot[start:start + len(idx)] = s_num[idx].sum(axis=1) / s_den[idx].sum(axis=1)
+    lo, hi = np.percentile(boot, [2.5, 97.5])
+    return float(num.sum() / den.sum()), float(lo), float(hi)
+
+
+def source_groups(m, src):
+    seen, mvc = src == SEEN[m], src == MVC
+    return ((f"from {SEEN[m]}", seen), ("Materials Project mvc-", mvc), ("from other sources", ~seen & ~mvc))
 
 
 seen_rows = []
-print(f"{'split':24s} {'features':16s} {'group':28s} {'n':>6s} {'MAE features / descriptors (95 % interval)':>44s}")
+print(f"{'split':24s} {'features':16s} {'group':24s} {'n':>6s} {'systems':>7s}  MAE features / descriptors, "
+      "95 % interval (systems resampled | materials resampled)")
 for split in SPLITS:
-    rs = [r for r in R.values() if r["split"] == split]
+    rs = rows_of(split)
     src = np.concatenate([r["src"] for r in rs])
+    system = np.concatenate([r["sys"] for r in rs])
     for m in METHODS[1:]:
         ef = np.concatenate([np.abs(r["mu"][m] - r["y_test"]) for r in rs])
         ed = np.concatenate([np.abs(r["mu"]["descriptors"] - r["y_test"]) for r in rs])
-        seen = src == GROUPS[m]
-        for label, mask in ((f"from {GROUPS[m]}", seen), ("from other sources", ~seen)):
+        for label, mask in source_groups(m, src):
             if mask.sum() < 100:
                 continue
-            q, lo, hi = ratio_ci(ef[mask], ed[mask])
-            seen_rows.append((split, m, label, int(mask.sum()), q, lo, hi))
-            print(f"{split:24s} {NAMES[m]:16s} {label:28s} {mask.sum():6d} {q:20.3f} ({lo:.3f}-{hi:.3f})")
+            q, lo, hi = cluster_ci(ef[mask], ed[mask], system[mask])
+            _, lo_m, hi_m = cluster_ci(ef[mask], ed[mask], np.arange(mask.sum()))
+            n_sys = len(np.unique(system[mask]))
+            seen_rows.append((split, m, label, int(mask.sum()), n_sys, q, lo, hi))
+            print(f"{split:24s} {NAMES[m]:16s} {label:24s} {mask.sum():6d} {n_sys:7d} {q:7.3f} ({lo:.3f}-{hi:.3f} | "
+                  f"{lo_m:.3f}-{hi_m:.3f})")
 """)
 
 code(r"""
 if seen_rows:
     fig, axes = plt.subplots(1, len(METHODS) - 1, figsize=(3.6 * (len(METHODS) - 1), 3.3), sharey=True, squeeze=False)
     for ax, m in zip(axes[0], METHODS[1:], strict=True):
+        labels = [label for label, _ in source_groups(m, SRC[:0])]
         for j, split in enumerate(SPLITS):
-            for k, (label, marker) in enumerate(((f"from {GROUPS[m]}", "o"), ("from other sources", "s"))):
+            for k, (label, marker) in enumerate(zip(labels, "o^s", strict=True)):
                 row = [s for s in seen_rows if s[0] == split and s[1] == m and s[2] == label]
                 if row:
-                    _, _, _, n, q, lo, hi = row[0]
-                    ax.errorbar(j + (k - 0.5) * 0.25, q, yerr=[[q - lo], [hi - q]], fmt=marker, color=COLORS[m],
-                                mfc="white" if k else COLORS[m], ms=5, capsize=2, lw=0.8)
+                    q, lo, hi = row[0][-3:]
+                    ax.errorbar(j + (k - 1) * 0.22, q, yerr=[[q - lo], [hi - q]], fmt=marker, color=COLORS[m],
+                                mfc=COLORS[m] if k == 0 else "white", ms=5, capsize=2, lw=0.8)
         ax.axhline(1, color="k", lw=0.6)
         ax.set_xticks(range(len(SPLITS)), [s.replace(" groups", "").replace("chemical-system", "chem.\nsystem")
                                            .replace("leave one element out", "one element\nout") for s in SPLITS],
                       fontsize=7)
-        ax.set_title(f"{NAMES[m]}: filled = from {GROUPS[m]}", fontsize=8)
+        ax.set_title(f"{NAMES[m]}: filled = from {SEEN[m]}, triangle = mvc-", fontsize=8)
     axes[0][0].set_ylabel("MAE features / MAE descriptors")
     fig.tight_layout()
     fig.savefig("figures/seen_in_pretraining.png")
@@ -429,20 +531,26 @@ md(r"""
 ## 5. Orientation: Orb's features with every structure rotated
 
 Every structure turned by its own random rotation, the Orb features computed again, and the downstream ensembles fitted again on six test sets (the first fold of each cross-validation, and F, O and Cu held out: two of the hardest elements and one typical one). If the orientation in which JARVIS stores the structures carried information, the error would change.
+
+Both fits predict the same test materials, so the difference of the MAEs (rotated minus stored) gets a paired 95 % interval, from resampling whole chemical systems as in section 4. One random rotation per structure is one draw: an interval that contains zero means that no effect of the orientation was found on that test set.
 """)
 
 code(r"""
 rot_rows = []
 if "orb-v3-omat-rotated" in FEAT:
-    print(f"{'test set':12s} {'MAE, stored orientation':>24s} {'MAE, rotated':>13s} {'correlation of predictions':>27s}")
+    print(f"{'test set':12s} {'MAE, stored orientation':>24s} {'MAE, rotated':>13s} {'difference (95 % interval)':>34s} "
+          f"{'correlation of predictions':>27s}")
     for t in runs.tasks(d, "orb-v3-omat-rotated"):
         res = runs.fit(d, "orb-v3-omat-rotated", t, FEAT["orb-v3-omat-rotated"], compute=not QUICK)
         if res is None or t.key not in R or "orb-v3-omat" not in R[t.key]["mu"]:
             continue
         r = R[t.key]
         a, b = mae(r, "orb-v3-omat"), float(np.mean(np.abs(res[0]["test_mu"] - r["y_test"])))
-        rot_rows.append((t.key, a, b))
-        print(f"{t.key:12s} {a:24.4f} {b:13.4f} {np.corrcoef(r['mu']['orb-v3-omat'], res[0]['test_mu'])[0, 1]:27.4f}")
+        diff = np.abs(res[0]["test_mu"] - r["y_test"]) - np.abs(r["mu"]["orb-v3-omat"] - r["y_test"])
+        _, lo, hi = cluster_ci(diff, np.ones_like(diff), r["sys"])
+        rot_rows.append((t.key, a, b, lo, hi))
+        print(f"{t.key:12s} {a:24.4f} {b:13.4f} {b - a:+12.4f} ({lo:+.4f} to {hi:+.4f}) "
+              f"{np.corrcoef(r['mu']['orb-v3-omat'], res[0]['test_mu'])[0, 1]:27.4f}")
 """)
 
 md(r"""
@@ -488,9 +596,11 @@ export = {
     "elements": [{"element": e, "n": len(EL[e]["y_test"]), **{f"r2_{m}": float(r2_el[m][i]) for m in METHODS},
                   **{f"mae_{m}": float(mae_el[m][i]) for m in METHODS}} for i, e in enumerate(elements)],
     "cgcnn_elements": {"elements": list(cg_el), "mae": {NAMES.get(m, m): [float(x) for x in v] for m, v in table12.items()}},
-    "seen_in_pretraining": [dict(zip(("split", "model", "group", "n", "ratio", "lo", "hi"), row, strict=True))
+    "energy_baseline": energy_table,
+    "seen_in_pretraining": [dict(zip(("split", "model", "group", "n", "systems", "ratio", "lo", "hi"), row, strict=True))
                             for row in seen_rows],
-    "rotation": [dict(zip(("task", "mae_stored", "mae_rotated"), row, strict=True)) for row in rot_rows],
+    "rotation": [dict(zip(("task", "mae_stored", "mae_rotated", "difference_lo", "difference_hi"), row, strict=True))
+                 for row in rot_rows],
     "invariance": [{"model": k[0], "change": k[1], "median": v[0], "p99": v[1], "max": v[2]} for k, v in invariance.items()],
     "uncertainty": [{"split": k[0], "method": k[1], "spearman_median": v[0], "coverage_normalized": v[1]}
                     for k, v in uq_rows.items()],
