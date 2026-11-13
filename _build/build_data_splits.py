@@ -328,9 +328,11 @@ for k in check_folds:
 n_models = len(FOLDS) * len(FOLDS_RUN) + len(check_folds)
 print(f"{n_models} models in {time.perf_counter() - t0:.0f} s\n")
 
-print(f"{'split, 10-fold cross-validation':32s} {'test MAE (eV/atom)':>22s} {'R²':>7s} {'MAE of mean':>12s} {'iterations':>11s}")
+print(f"{'split, 10-fold cross-validation':32s} {'test MAE (eV/atom)':>22s} {'R²':>7s} {'MAE of mean':>12s} {'iterations':>11s}"
+      f" {'× random':>9s}")
 for name, v in results.items():
-    print(f"{name:32s} {v['mae']:12.4f} ± {v['sd']:.4f} (sd) {v['r2']:7.3f} {v['base']:12.3f} {v['iters']:11.0f}")
+    print(f"{name:32s} {v['mae']:12.4f} ± {v['sd']:.4f} (sd) {v['r2']:7.3f} {v['base']:12.3f} {v['iters']:11.0f}"
+          f" {v['mae'] / results['random']['mae']:9.2f}")
 print(f"\nchemical-system folds {check_folds}: MAE with a grouped validation set {np.mean(grouped):.4f}, "
       f"with a random one {np.mean(randomval):.4f} eV/atom")
 summary.append(("random 10-fold cross-validation: test MAE (eV/atom)", f"{results['random']['mae']:.3f}",
@@ -378,7 +380,8 @@ print(f"{len(ELEMENTS)} models in {time.perf_counter() - t0:.0f} s")
 r2s = {e: v["r2"] for e, v in loeo.items()}
 worst = sorted(r2s, key=r2s.get)
 print(f"R² > 0.95: {np.mean([v > 0.95 for v in r2s.values()]):.0%} of the elements; "
-      f"median MAE {np.median([v['mae'] for v in loeo.values()]):.3f} eV/atom")
+      f"median MAE {np.median([v['mae'] for v in loeo.values()]):.3f} eV/atom "
+      f"({np.median([v['mae'] for v in loeo.values()]) / results['random']['mae']:.2f} × random)")
 print(f"{'worst elements':16s} {'n':>6s} {'MAE':>7s} {'R²':>7s} {'bias':>7s}  (bias = mean of predicted − DFT, eV/atom)")
 for e in worst[:10]:
     v = loeo[e]
@@ -473,7 +476,8 @@ model, p_add = fit_predict(tr_p, va_p, X_add)
 err_add = np.abs(p_add - y_add)
 dist_add = splits.distance_to_train(X[tr_p], X_add)
 rel_add = relations(tr_p, formula_add, system_add, proto_add)
-print(f"prospective test, {len(added)} materials: MAE {mae(p_add, y_add):.4f} eV/atom, R² {r2(p_add, y_add):.3f}, "
+print(f"prospective test, {len(added)} materials: MAE {mae(p_add, y_add):.4f} eV/atom "
+      f"({mae(p_add, y_add) / results['random']['mae']:.2f} × random), R² {r2(p_add, y_add):.3f}, "
       f"predicting the training mean {mae(np.full(len(y_add), y[tr_p].mean()), y_add):.3f} eV/atom, "
       f"{model.n_iter_} iterations")
 print(f"\n{'added materials whose training set has':40s} {'share':>7s} {'MAE yes':>9s} {'MAE no':>9s}")
