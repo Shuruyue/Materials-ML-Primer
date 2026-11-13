@@ -8,8 +8,8 @@ In the `cgcnn` experiment a graph network trained from scratch beat gradient boo
 |---|---|
 | 1 | Data: features of the three models for the 55 712 materials of the 2021.8.18 snapshot and the 38 190 added up to 2025.9.24; where each structure came from |
 | 2 | Verification on JARVIS structures: agreement with each package's own outputs; invariance to atom order, supercells, rotations and reflections |
-| 3 | Accuracy on the 109 test sets of `uncertainty` (random, chemical-system and prototype cross-validation, all 78 held-out elements, the prospective test), against the descriptors and CGCNN |
-| 4 | Seen during pretraining? The gain over the descriptors for test materials from the pretraining source and from other sources |
+| 3 | Accuracy on the 109 test sets of `uncertainty` (random, chemical-system and prototype cross-validation, all 78 held-out elements, the prospective test), against the descriptors and CGCNN; the models' own energy with one correction per element as a baseline, and which model learned MP2020-corrected energies |
+| 4 | Seen during pretraining? The gain over the descriptors for test materials from the pretraining source and from other sources, for the features and for the energy baseline |
 | 5 | Orb with every structure randomly rotated, on six test sets |
 | 6 | The spread of the ensemble as an uncertainty |
 
@@ -23,7 +23,17 @@ In the `cgcnn` experiment a graph network trained from scratch beat gradient boo
 | chemical-system groups | 0.105 | 0.100 | 0.093 | 0.093 | 0.062 | 9, 10, 10 of 10 |
 | prototype groups | 0.157 | 0.111 | 0.096 | 0.111 | 0.084 | 10, 10, 10 of 10 |
 | leave one element out (78 elements) | 0.160 | 0.146 | 0.148 | 0.137 | (12 elements only) | 48, 54, 61 of 78 |
+| leave one element out (the 12 elements of `cgcnn`) | 0.303 | 0.258 | 0.281 | 0.306 | 0.382 | 9, 9, 8 of 12 |
 | prospective (materials added after 2021) | 0.117 | 0.109 | 0.103 | 0.105 | 0.073 | 1, 1, 1 of 1 |
+
+**The pretrained energy with one correction per element** (eV/atom; least squares of the formation energy on the model's energy per atom and the atomic fractions, fitted on the training materials of each test set; not possible with an element held out, and Orb's energy was not stored):
+
+| Test set | CHGNet energy + corrections | gradient boosting on CHGNet features | MACE-MP-0b3 energy + corrections | gradient boosting on MACE features | descriptors (150) | CGCNN ensemble |
+|---|---|---|---|---|---|---|
+| random 10-fold cross-validation | 0.069 | 0.075 | 0.120 | 0.084 | 0.088 | 0.056 |
+| chemical-system groups | 0.070 | 0.093 | 0.121 | 0.100 | 0.105 | 0.062 |
+| prototype groups | **0.070** | 0.096 | 0.122 | 0.111 | 0.157 | 0.084 |
+| prospective (materials added after 2021) | 0.079 | 0.103 | 0.129 | 0.109 | 0.117 | 0.073 |
 
 **The elements hardest to hold out** (R² and MAE in eV/atom of each held-out element's compounds; CGCNN from `cgcnn`):
 
@@ -38,36 +48,50 @@ In the `cgcnn` experiment a graph network trained from scratch beat gradient boo
 | *mean over the 12 elements of `cgcnn`* | | | | | | *0.303* | *0.258* | *0.281* | *0.306* | *0.382* |
 | *mean over all 78 elements* | | | | | | *0.160* | *0.146* | *0.148* | *0.137* | |
 
-**Seen during pretraining?** MAE of the features divided by the MAE of the descriptors on the same test materials (95 % bootstrap interval), for materials whose structure came from the model's pretraining source and from other sources:
+**Seen during pretraining?** MAE of the features divided by the MAE of the descriptors on the same test materials (95 % interval from resampling whole chemical systems, whole structure types for the prototype split), for materials whose structure came from the model's pretraining source and from other sources:
 
 | Test set | MACE-MP-0b3: from Materials Project | other sources | CHGNet: from Materials Project | other sources | Orb v3: from Alexandria | other sources |
 |---|---|---|---|---|---|---|
-| random 10-fold cross-validation | 0.91 (0.90–0.92) | 1.06 (1.03–1.09) | 0.84 (0.83–0.86) | 0.89 (0.87–0.91) | – | 0.90 (0.89–0.92) |
-| chemical-system groups | 0.91 (0.90–0.93) | 1.03 (1.01–1.06) | 0.87 (0.86–0.88) | 0.90 (0.88–0.92) | – | 0.88 (0.87–0.89) |
-| prototype groups | 0.74 (0.73–0.75) | 0.66 (0.65–0.67) | 0.67 (0.66–0.68) | 0.52 (0.51–0.54) | – | 0.71 (0.70–0.71) |
-| leave one element out (78 elements) | 0.85 (0.84–0.85) | 0.99 (0.98–1.00) | 0.90 (0.90–0.91) | 0.99 (0.98–1.00) | – | 1.08 (1.08–1.09) |
-| prospective (materials added after 2021) | 0.84 (0.82–0.86) | 0.96 (0.95–0.98) | 0.85 (0.84–0.87) | 0.89 (0.88–0.91) | 1.10 (1.06–1.14) | 0.88 (0.86–0.89) |
+| random 10-fold cross-validation | 0.91 (0.89–0.92) | 1.09 (1.06–1.12) | 0.84 (0.83–0.86) | 0.90 (0.88–0.93) | – | 0.91 (0.89–0.92) |
+| chemical-system groups | 0.91 (0.89–0.94) | 1.06 (1.03–1.10) | 0.87 (0.84–0.90) | 0.91 (0.89–0.94) | – | 0.88 (0.86–0.90) |
+| prototype groups | 0.74 (0.71–0.78) | 0.66 (0.55–0.82) | 0.67 (0.62–0.72) | 0.52 (0.41–0.67) | – | 0.71 (0.62–0.80) |
+| leave one element out (78 elements) | 0.85 (0.83–0.86) | 1.01 (0.99–1.03) | 0.90 (0.88–0.93) | 1.02 (0.98–1.07) | – | 1.06 (1.04–1.08) |
+| prospective (materials added after 2021) | 0.84 (0.81–0.87) | 0.96 (0.94–0.99) | 0.85 (0.83–0.88) | 0.89 (0.87–0.91) | 1.10 (1.06–1.15) | 0.88 (0.86–0.89) |
 
-*The 2021 snapshot has no Alexandria-sourced materials. With elements held out, the ratios pool the test materials of all 78 elements (a material appears once for each of its elements), so the oxides (14 992 compounds) dominate; Orb's 1.08 there comes from its failure on oxides.*
+*The 2021 snapshot has no Alexandria-sourced materials. The 1518 Materials Project entries with `mvc-` identifiers, whose presence in MPtrj is not known, are a group of their own (in the notebook) and in neither column. With elements held out, the ratios pool the test materials of all 78 elements (a material appears once for each of its elements), so the oxides (14 992 compounds) dominate; Orb's 1.06 there comes from its failure on oxides.*
+
+The same ratio for the energy baseline (MAE of the energy with one correction per element, divided by the MAE of the descriptors):
+
+| Test set | CHGNet energy: from Materials Project | other sources | MACE-MP-0b3 energy: from Materials Project | other sources |
+|---|---|---|---|---|
+| random 10-fold cross-validation | 0.80 (0.77–0.83) | 0.73 (0.71–0.76) | 1.49 (1.42–1.57) | 0.91 (0.88–0.94) |
+| chemical-system groups | 0.66 (0.63–0.69) | 0.66 (0.63–0.68) | 1.23 (1.17–1.30) | 0.82 (0.79–0.85) |
+| prototype groups | 0.51 (0.44–0.58) | 0.33 (0.26–0.46) | 0.95 (0.81–1.11) | 0.41 (0.33–0.57) |
+| prospective (materials added after 2021) | 1.00 (0.92–1.10) | 0.58 (0.57–0.59) | 2.06 (1.90–2.26) | 0.83 (0.81–0.86) |
+
+- **For CHGNet, the pretrained energy does better than the features.** CHGNet's energy per atom with one linear correction per element reaches 0.069 eV/atom on the random split and hardly degrades under shift (0.070 on new chemical systems and on new structure types, 0.079 on later materials). On new structure types that is the lowest error of any method here, CGCNN included; on the other splits CGCNN stays ahead. The fitted coefficient of the energy is 1.003–1.012 on every test set. The advantage does not come from the Materials Project materials CHGNet was pretrained on: relative to the descriptors it is as large or larger on the materials from other sources.
+- **CHGNet learned MP2020-corrected energies, MACE-MP-0b3 did not.** The difference between the two models' energies, regressed on the fractions of oxygen, fluorine and the +U metals in oxides and fluorides, reproduces the MP2020 corrections of Materials Project (Wang et al., *Sci. Rep.* **11**, 15496, 2021; values read from pymatgen): −0.680 eV per oxygen atom in oxides without a +U metal (MP2020: −0.687), within 0.01 eV per atom of V, Cr, Mn and W and within 0.11 eV of Co, Fe, Ni and Mo, and a median of −0.002 eV/atom for materials without any corrected species. The +U corrections apply to a metal only in its oxides and fluorides, which one constant per element cannot represent; this is why MACE's energy baseline (0.120–0.129 eV/atom) is worse than the descriptors except on new structure types, and worst on the Materials-Project-sourced materials.
 
 - **Frozen features beat the descriptors, but not a network trained on the task.** With the same gradient-boosting ensemble, the features of all three models beat the 150 descriptors on every fold of every cross-validation and on the prospective test (except one chemical-system fold for MACE): 4–14 % lower MAE on the random split, 29–39 % lower on new structure types. CGCNN trained from scratch on the same materials is better still on all these splits.
 - **With an element held out, pretraining helps on average, not uniformly.** Over the 78 elements the mean MAE falls from 0.160 to 0.137–0.148 eV/atom, and the features are better on 48 (MACE), 54 (CHGNet) and 61 (Orb) of them. On the 12 elements of `cgcnn`, MACE's and CHGNet's features beat both the descriptors and CGCNN. Fluorides gain the most (R² 0.11 → 0.29, 0.53, 0.68), hydrides gain with MACE and Orb but lose with CHGNet, oxides fail with Orb (overestimated by 1.17 eV/atom on average), and Be and C compounds get worse with all three. The hard elements stay hard (Spearman 0.77–0.81 between the per-element R² of features and descriptors).
-- **The gain of the MPtrj models sits on Materials Project structures.** MACE-MP-0b3's features beat the descriptors on test materials whose structure came from Materials Project and hardly or not at all on the others; CHGNet shows the same direction, less strongly. The structure-type split goes the other way, and Orb, pretrained on data derived from Alexandria, is worse than the descriptors on the Alexandria-sourced materials added after 2021. The source groups differ in what they hold (43 % of the Materials-Project-sourced materials have an ICSD entry, none of the others), so memorization cannot be told apart from a better coverage of Materials-Project-like chemistry.
-- **Orb's features depend on orientation; its results hardly do.** Orb learns rotational symmetry from data instead of building it in: a rotation changes some of its features by up to 2.8 times their spread between materials, while its energy changes by at most 5 × 10⁻⁴ eV/atom. Fitted again with every structure turned, six test sets changed their MAE by 0.2–3 %.
+- **The gain of the MPtrj models' features sits on Materials Project structures.** MACE-MP-0b3's features beat the descriptors on test materials whose structure came from Materials Project and not on the others; CHGNet shows the same direction, less strongly. On new structure types the intervals, which resample whole structure types, are wide and overlap. Orb, pretrained on data derived from Alexandria, is worse than the descriptors on the Alexandria-sourced materials added after 2021. The source groups differ in what they hold (43 % of the Materials-Project-sourced materials have an ICSD entry, none of the others), so memorization cannot be told apart from a better coverage of Materials-Project-like chemistry.
+- **Orb's features depend on orientation; its results hardly do.** Orb learns rotational symmetry from data instead of building it in: a rotation changes some of its features by up to 2.8 times their spread between materials, while its energy changes by at most 5 × 10⁻⁴ eV/atom. Fitted again with every structure turned, six test sets changed their MAE by 0.2–3 %; the paired 95 % interval excludes zero only for the first chemical-system fold (+2.9 %).
 - **The uncertainty does not improve.** The ensemble's spread ranks the errors slightly worse on the features than on the descriptors, and conformal intervals scaled by it cover about the same.
 
 ## Validation
 
 | Quantity | This run | Check | Check from |
 |---|---|---|---|
-| MACE features of 30 JARVIS structures against `MACECalculator.get_descriptors` | largest difference 3.5 × 10⁻⁶ | equal up to float32 rounding | mace-torch 0.3.17 |
-| CHGNet: sum of the atom features and energy against its own `crystal_fea` and energy | largest difference 1.1 × 10⁻⁵ | equal up to float32 rounding | chgnet 0.4.2 |
-| Orb: energy of batched structures against its ASE calculator | largest difference 5.1 × 10⁻⁶ eV/atom | equal up to float32 rounding | orb-models 0.7.0 |
-| Feature change under atom reordering, supercell, rotation, reflection (100 structures; 99th percentile, in units of the spread between materials) | MACE, CHGNet ≤ 1.2 × 10⁻⁵; Orb 5 × 10⁻⁶ (order), 2.5 × 10⁻⁵ (supercell), 0.41 (rotation), 0.42 (reflection) | 0 for an invariant model | the models' construction |
-
-The differences at the level of float32 rounding change slightly from run to run, because the GPU adds in an unspecified order.
+| MACE features of 30 JARVIS structures against `MACECalculator.get_descriptors` | largest difference 3.9 × 10⁻⁶ | equal up to float32 rounding | mace-torch 0.3.17 |
+| CHGNet: sum of the atom features and energy against its own `crystal_fea` and energy | largest difference 5.7 × 10⁻⁶ | equal up to float32 rounding | chgnet 0.4.2 |
+| Orb: energy of batched structures against its ASE calculator | largest difference 6.4 × 10⁻⁶ eV/atom | equal up to float32 rounding | orb-models 0.7.0 |
+| Feature change under atom reordering, supercell, rotation, reflection (100 structures; 99th percentile, in units of the spread between materials) | MACE, CHGNet ≤ 1.2 × 10⁻⁵; Orb 8 × 10⁻⁶ (order), 2.5 × 10⁻⁵ (supercell), 0.41 (rotation), 0.42 (reflection) | 0 for an invariant model | the models' construction |
 | Descriptor results used for comparison | identical to those of `cgcnn` and `uncertainty` | identical | `uncertainty` cache |
 | Leave one element out: elements hardest for the descriptors | F, O, N, H, Be, C | F, N, H, O, Be, C hardest for gradient boosting and ALIGNN | `data_splits`; Li et al. 2024 |
+| E_CHGNet − E_MACE per oxygen atom, oxides without fluorine or a +U metal (4933) | −0.680 eV | −0.687 eV (MP2020 oxide correction) | pymatgen `MP2020Compatibility.yaml` |
+| Coefficient of the energy in the energy baseline, CHGNet / MACE (31 test sets) | 1.003–1.012 / 0.945–0.963 | 1 if the energy differences were JARVIS's | — |
+
+The differences at the level of float32 rounding change slightly from run to run, because the GPU adds in an unspecified order.
 
 No published number for gradient boosting on frozen features of these models for JARVIS formation energies was found, so the accuracy is compared with the descriptors and CGCNN of this repository on the same materials. The pytest suite run by the notebook (19 tests) checks the feature dimensions, that a structure gets the same features in a batch and alone, the invariances on small random cells, atoms without neighbors in CHGNet, and the agreement with each package's own outputs.
 
@@ -79,7 +103,7 @@ No published number for gradient boosting on frozen features of these models for
 
 ![Seen in pretraining](figures/seen_in_pretraining.png)
 
-*MAE of the features divided by the MAE of the descriptors on the same test materials, for materials whose structure came from the model's pretraining source (filled; Materials Project for MACE and CHGNet, Alexandria for Orb) and from other sources (open), with 95 % bootstrap intervals. Below 1 the features do better.*
+*MAE of the features divided by the MAE of the descriptors on the same test materials, for materials whose structure came from the model's pretraining source (filled circles; Materials Project for MACE and CHGNet, Alexandria for Orb), Materials Project `mvc-` entries (triangles) and other sources (open squares), with 95 % intervals from resampling whole chemical systems (structure types for the prototype split). Below 1 the features do better.*
 
 ## Protocol
 
@@ -87,12 +111,13 @@ No published number for gradient boosting on frozen features of these models for
 - **Models.** MACE-MP-0b3 medium (mace-torch 0.3.17; MIT; pretrained on MPtrj), CHGNet 0.3.0 (chgnet 0.4.2; BSD-3-Clause; MPtrj) and Orb v3 conservative with unlimited neighbors trained on OMat24 (orb-models 0.7.0; Apache-2.0; the AIMD subset of OMat24, derived from Alexandria). The weights are downloaded by each package; none are redistributed here.
 - **Features.** The atom vectors that each model's energy readout reads (MACE: the scalar channels after both interactions, 256; CHGNet: after the last convolution and its layer norm, 64; Orb: the node features after the last message-passing step, 256), summarized per structure by their mean and standard deviation over the atoms (Chorna et al., arXiv:2512.05717, show that the mean alone loses information). All in float32 on the GPU, in batches of up to 2000 atoms.
 - **Downstream model.** The bootstrap ensemble of five `HistGradientBoostingRegressor` models of `uncertainty` (learning rate 0.1, at most 2500 iterations, early stopping on the validation set), trained on the features instead of the 150 descriptors, with the training, validation, calibration and test materials of each of its 109 test sets.
-- **Seen during pretraining.** For each split, the test materials are divided by source, and the MAE of the features is divided by the MAE of the descriptors on the same materials, with 95 % intervals from 2000 bootstrap resamples of the materials.
+- **Energy baseline.** For each test set except leave one element out, least squares of the formation energy on the model's energy per atom and the atomic fractions of all elements (one coefficient for the energy, one per element), fitted on the training materials; MACE and CHGNet only (Orb's energy needs a gradient pass and was not stored with its features).
+- **Seen during pretraining.** For each split, the test materials are divided by source (Materials Project, Materials Project `mvc-`, Alexandria for Orb, other), and the MAE of the features or of the energy baseline is divided by the MAE of the descriptors on the same materials. The 95 % intervals come from 2000 cluster-bootstrap resamples: whole chemical systems, or whole structure types for the prototype split, are drawn with replacement, because materials of one cluster share their errors and a compound is in the test set of each of its elements when elements are held out (resampling single materials gives narrower intervals; the notebook prints both). The same paired cluster bootstrap gives the interval of the MAE difference in the rotation test.
 - **Uncertainty.** As in `uncertainty`: Spearman correlation between the ensemble's standard deviation and the absolute error, and the coverage of split conformal 90 % intervals scaled by the standard deviation.
 
 ## Differences from standard practice
 
-The features took 28 minutes on an RTX 3060; the 333 gradient-boosting ensembles took 98 hours of process time, run as four processes of four threads on an i5-13400 (about 25 hours of wall-clock time). These choices keep it there or make the comparison possible; each is a simplification of what a full study would do.
+The features took 26 minutes on an RTX 3060; the 333 gradient-boosting ensembles took 98 hours of process time, run as four processes of four threads on an i5-13400 (about 25 hours of wall-clock time). These choices keep it there or make the comparison possible; each is a simplification of what a full study would do.
 
 - **Frozen features with gradient boosting.** Transfer from a pretrained potential is usually done by fine-tuning it or by training a neural readout on its features. Here the models are frozen and the downstream model is the descriptors' gradient boosting, so that the input is the only difference; fine-tuning or another readout might do better.
 - **One layer, two statistics.** Only the last-layer atom features are used, summarized by their mean and standard deviation; other layers and higher cumulants were not tried.
@@ -100,7 +125,8 @@ The features took 28 minutes on an RTX 3060; the 333 gradient-boosting ensembles
 - **Orb runs without TorchDynamo and in full float32.** Orb's neighbor search is wrapped in `torch.compile`, which needs Triton, and Triton is not available on Windows; TorchDynamo is switched off so that the same code runs eagerly (its energies equal those of Orb's calculator). Orb's default precision allows TF32 matrix products, which made a structure's features depend on the other structures of its batch at the 10⁻³ level; plain float32 ("float32-highest") is used instead, which is slower.
 - **Orb's features are not rotation invariant.** The structures are used in the orientation JARVIS stores them; the effect of random orientations was measured on six test sets only.
 - **Atoms without neighbors.** CHGNet refuses by default a structure with an atom that has no neighbor within 6 Å; 13 such atoms were kept with their embedding only.
-- **Pretraining overlap inferred, not checked.** Whether a test compound is in MPtrj or OMat24 is inferred from where JARVIS took its structure; checking it would need the full pretraining data sets (several GB). The pretraining energies are PBE or PBE+U, the JARVIS targets OptB88vdW.
+- **Pretraining overlap inferred, not checked.** Whether a test compound is in MPtrj or OMat24 is inferred from where JARVIS took its structure; checking it would need the full pretraining data sets (several GB). The pretraining energies are PBE or PBE+U, the JARVIS targets OptB88vdW; whether a model learned the MP2020-corrected energies was inferred from its energies, as described above, not from its training code.
+- **The energy baseline is linear and partial.** One coefficient per element, no interaction terms; MACE's energy with the MP2020 corrections applied, and Orb's energy, were not tried.
 - **No hyperparameter search, and the iteration limit is reached.** The gradient-boosting settings are those of `uncertainty`; 37 % (MACE), 77 % (CHGNet) and 24 % (Orb) of the ensemble members reached the limit of 2500 iterations (84 % on the descriptors), so some could improve with more.
 - **One assignment of materials per test set**, from `uncertainty`; the spread given is between folds or elements.
 - **Fitting times are upper bounds.** Four processes shared the CPU, and when three of them had finished their share, helper processes took over the remaining jobs of the fourth; the results do not depend on which process computed them.
@@ -126,7 +152,7 @@ From the repository root, after the setup in [../../README.md](../../README.md) 
 conda activate mmp
 pytest -q tests/test_pretrained.py      # downloads the model weights on first use
 cd experiments/pretrained_features
-python runs.py features mace-mp-0b3      # about 5 min on an RTX 3060; also chgnet-0.3.0 (14 min), orb-v3-omat, orb-v3-omat-rotated (5 min each)
+python runs.py features mace-mp-0b3      # about 5 min on an RTX 3060; also chgnet-0.3.0 (14 min), orb-v3-omat (5 min), orb-v3-omat-rotated (3 min, 2021 snapshot only)
 OMP_NUM_THREADS=4 python runs.py fit chgnet-0.3.0,mace-mp-0b3,orb-v3-omat,orb-v3-omat-rotated 0 4   # and 1 4, 2 4, 3 4 (about a day)
 jupyter lab pretrained_features.ipynb
 ```

@@ -133,9 +133,17 @@ def source(rec):
 
 SRC = np.array([source(r) for r in d["records"]])
 SRC_ADD = np.array([source(r) for r in d["added"]])
-# chemical system of every material: the unit of the cluster bootstrap in sections 4 and 5
+# the unit of the cluster bootstrap in sections 4 and 5: the prototype label for the prototype split (whose test
+# sets are whole structure types), the chemical system for every other split
 SYS = np.array(d["system"])
 SYS_ADD = np.array(["-".join(splits.chemical_system(data.structure_arrays(r["atoms"])[2])) for r in d["added"]])
+PROTO = np.array(d["proto"])
+
+
+def cluster_units(t):
+    if t.split == "prototype groups":
+        return PROTO[t.test]
+    return (SYS_ADD if t.added else SYS)[t.test]
 has_icsd = np.array([bool(str(r.get("icsd", "")).strip()) for r in d["records"]])
 print(f"{'source of the starting structure':32s} {'2021 snapshot':>14s} {'with an ICSD entry':>19s} {'added later':>12s}")
 for s in ["Materials Project", "Materials Project (mvc)", "Alexandria", "AFLOW", "JQE (not documented)", "JARVIS", "other"]:
@@ -246,7 +254,7 @@ for t in TASKS:
         continue
     r = {"key": t.key, "split": t.split, "test": t.test, "added": t.added, "y_cal": d["y"][t.cal],
          "y_test": (d["y_add"] if t.added else d["y"])[t.test],
-         "src": (SRC_ADD if t.added else SRC)[t.test], "sys": (SYS_ADD if t.added else SYS)[t.test],
+         "src": (SRC_ADD if t.added else SRC)[t.test], "unit": cluster_units(t),
          "mu": {"descriptors": desc[t.key][0]["test_mu_ens"]}, "sd": {"descriptors": desc[t.key][0]["test_sd_ens"]},
          "cal_mu": {"descriptors": desc[t.key][0]["cal_mu_ens"]}, "cal_sd": {"descriptors": desc[t.key][0]["cal_sd_ens"]}}
     for v in runs.MODELS:
@@ -327,7 +335,9 @@ for m in METHODS[1:]:
 md(r"""
 ### The pretrained energy itself
 
-The three models were pretrained to predict the DFT energy, and their energy per atom was computed with the features. A formation energy is an energy per atom minus composition-weighted reference energies of the elements, so a linear model $y \approx a E + \sum_i c_i x_i$ ($E$: the model's energy per atom, $x_i$: the atomic fraction of element $i$), fitted by least squares on the training materials of each test set, turns the predicted energy into a formation energy with one correction per element. The corrections also absorb what is systematic per element in the difference between the pretraining data (PBE, and PBE+U for oxides and fluorides of some transition metals) and JARVIS (OptB88vdW). If this baseline comes close to gradient boosting on the features, what the features add is mostly the energy the model learned; if it is far behind, the features carry more than the energy. With an element held out the correction of that element has no training data, so that split is left out; materials of the other splits with an element that no training material has are kept and counted.
+The models were pretrained to predict the DFT energy, and MACE's and CHGNet's energy per atom was stored with their features (Orb's energy needs a gradient pass and was not computed, `pretrained.load`). A formation energy is an energy per atom minus composition-weighted reference energies of the elements, so a linear model $y \approx a E + \sum_i c_i x_i$ ($E$: the model's energy per atom, $x_i$: the atomic fraction of element $i$), fitted by least squares on the training materials of each test set, turns the predicted energy into a formation energy with one correction per element. The corrections also absorb what is systematic per element in the difference between the pretraining data (PBE, and PBE+U for oxides and fluorides of some transition metals) and JARVIS (OptB88vdW). If this baseline comes close to gradient boosting on the features, what the features add is mostly the energy the model learned; if it is far behind, the features carry more than the energy. With an element held out the correction of that element has no training data, so that split is left out; materials of the other splits with an element that no training material has are kept and counted.
+
+One correction per element cannot undo a correction that depends on the compound: Materials Project mixes PBE and PBE+U energies with the MP2020 scheme, which adds a fixed energy per oxygen or fluorine atom and, in oxides and fluorides, per atom of a +U metal (Wang et al., *Sci. Rep.* **11**, 15496, 2021). Whether a model learned corrected or uncorrected energies shows in the difference between the two models' energies: regressed on the fractions of the corrected species, it should give the MP2020 values if one model learned corrected energies and the other did not.
 """)
 
 code(r"""
@@ -344,14 +354,17 @@ def fractions(records):
 
 
 def energy_baseline(E_train, F_train, y_train, E_test, F_test):
-    # least squares of y on [E, fractions]; the fractions sum to one, so they hold the intercept
-    ok = np.isfinite(E_train)
-    coef = np.linalg.lstsq(np.column_stack([E_train[ok], F_train[ok]]), y_train[ok], rcond=None)[0]
-    return np.column_stack([E_test, F_test]) @ coef
+    # least squares of y on [E, fractions]; the fractions sum to one, so they hold the intercept.
+    # Returns the predictions and a, the coefficient of the energy (1 if the model's energy differences were JARVIS's)
+    coef = np.linalg.lstsq(np.column_stack([E_train, F_train]), y_train, rcond=None)[0]
+    return np.column_stack([E_test, F_test]) @ coef, float(coef[0])
 
 
 FRAC, FRAC_ADD = fractions(d["records"]), fractions(d["added"])
-E_METHODS = METHODS[1:]
+# Orb's energy is not stored with its features (NaN): it needs a gradient pass
+E_METHODS = [m for m in METHODS[1:] if np.isfinite(FEAT[m][0]["energy"]).all() and np.isfinite(FEAT[m][1]["energy"]).all()]
+print("models with a stored energy:", ", ".join(NAMES[m] for m in E_METHODS),
+      "| without:", ", ".join(NAMES[m] for m in METHODS[1:] if m not in E_METHODS))
 E_ROWS = [s for s in ROWS if s not in (LOEO, LOEO12)]
 for t in TASKS:
     if t.split == LOEO or t.key not in R:
@@ -361,21 +374,54 @@ for t in TASKS:
     r["unseen_element"] = int((F_test[:, FRAC[t.train].sum(axis=0) == 0] > 0).any(axis=1).sum())
     for m in E_METHODS:
         E, E_add = FEAT[m][0]["energy"], FEAT[m][1]["energy"]
-        r.setdefault("energy_mu", {})[m] = energy_baseline(E[t.train], FRAC[t.train], d["y"][t.train],
-                                                           (E_add if t.added else E)[t.test], F_test)
+        r.setdefault("energy_mu", {})[m], r.setdefault("energy_a", {})[m] = energy_baseline(
+            E[t.train], FRAC[t.train], d["y"][t.train], (E_add if t.added else E)[t.test], F_test)
 energy_table = {}
-print(f"{'split':24s} {'materials with an element':>26s}  MAE, energy baseline / features")
+print(f"\n{'split':24s} {'materials with':>14s}  MAE (eV/atom): energy + corrections / gradient boosting on the features"
+      f"{'':4s} descriptors   CGCNN")
+print(f"{'':24s} {'an unseen element':>14s}")
 for split in E_ROWS:
     rs = rows_of(split)
-    energy_table[split] = {m: float(np.mean([np.nanmean(np.abs(r["energy_mu"][m] - r["y_test"])) for r in rs]))
+    energy_table[split] = {m: float(np.mean([np.mean(np.abs(r["energy_mu"][m] - r["y_test"])) for r in rs]))
                            for m in E_METHODS}
-    print(f"{split:24s} {sum(r['unseen_element'] for r in rs):19d} unseen  "
-          + "  ".join(f"{NAMES[m]} {energy_table[split][m]:.4f} / {mae_table[split][m]:.4f}" for m in E_METHODS))
-bad = {m: int((~np.isfinite(np.concatenate([FEAT[m][0]["energy"], FEAT[m][1]["energy"]]))).sum()) for m in E_METHODS}
-print(f"non-finite energies (left out of the fits; their predictions are skipped): {bad}")
+    print(f"{split:24s} {sum(r['unseen_element'] for r in rs):14d}  "
+          + "  ".join(f"{NAMES[m]} {energy_table[split][m]:.4f} / {mae_table[split][m]:.4f}" for m in E_METHODS)
+          + f"{mae_table[split]['descriptors']:16.4f} {cgcnn_mae(split):7.4f}")
+for m in E_METHODS:
+    a = [r["energy_a"][m] for r in R.values() if "energy_a" in r]
+    print(f"{NAMES[m]}: coefficient a of the energy, over the {len(a)} test sets: {min(a):.3f} to {max(a):.3f}")
 for m in E_METHODS:
     summary.append((f"MAE random split, {NAMES[m]} energy + one correction per element",
                     f"{energy_table['random'][m]:.4f}", f"features {mae_table['random'][m]:.4f}", "this notebook"))
+""")
+
+code(r"""
+# Which model learned MP2020-corrected energies? Regress E_CHGNet - E_MACE on the fractions of oxygen, fluorine and,
+# in oxides and fluorides, of each +U metal, on the 2021 materials with no other MP2020-corrected anion
+from pymatgen.analysis.compatibility import MP2020_COMPAT_CONFIG
+
+MIX = MP2020_COMPAT_CONFIG["Corrections"]["GGAUMixingCorrections"]["O"]       # the same for F (pymatgen checks it)
+ANION = MP2020_COMPAT_CONFIG["Corrections"]["CompositionCorrections"]
+others = [e for e in ANION if e in COL and e not in ("O", "F")]
+clean = (FRAC[:, [COL[e] for e in others]] == 0).all(axis=1)
+has_anion = (FRAC[:, COL["O"]] > 0) | (FRAC[:, COL["F"]] > 0)
+species = ["O", "F"] + list(MIX)
+A = np.column_stack([FRAC[:, COL["O"]], FRAC[:, COL["F"]]] + [FRAC[:, COL[e]] * has_anion for e in MIX]
+                    + [np.ones(len(FRAC))])[clean]
+D = (FEAT["chgnet-0.3.0"][0]["energy"] - FEAT["mace-mp-0b3"][0]["energy"])[clean]
+coef = np.linalg.lstsq(A, D, rcond=None)[0]
+mp2020 = [ANION["oxide"], ANION["F"]] + [MIX[e] for e in MIX] + [0.0]
+print(f"E_CHGNet - E_MACE on {clean.sum()} materials without {', '.join(others)} (eV per atom of the species)")
+print(f"{'species':8s} {'fitted':>8s} {'MP2020':>8s}")
+for s, c, e in zip(species + ["const"], coef, mp2020, strict=True):
+    print(f"{s:8s} {c:8.3f} {e:8.3f}")
+metals = (A[:, 2:-1].sum(axis=1) == 0) & (A[:, 1] == 0) & (A[:, 0] > 0)
+free = (A[:, :-1].sum(axis=1) == 0)
+print(f"oxides without fluorine or a +U metal ({metals.sum()}): median of (E_CHGNet - E_MACE) / x_O "
+      f"{np.median(D[metals] / A[metals, 0]):+.3f} (MP2020 oxide correction {ANION['oxide']:+.3f})")
+print(f"materials without any corrected species ({free.sum()}): median E_CHGNet - E_MACE {np.median(D[free]):+.3f} eV/atom")
+summary.append(("E_CHGNet - E_MACE per O atom, oxides without F or a +U metal", f"{np.median(D[metals] / A[metals, 0]):+.3f}",
+                f"MP2020 {ANION['oxide']:+.3f}", "pymatgen MP2020Compatibility.yaml"))
 """)
 
 md(r"""
@@ -455,7 +501,7 @@ md(r"""
 
 If the features help because the pretrained model has seen the test compounds themselves, the gain over the descriptors should be larger for test materials whose structure came from the pretraining source (Materials Project for MACE and CHGNet, Alexandria for Orb) than for the others. The test materials of a split are therefore divided by source, and for each group the MAE of the features is divided by the MAE of the descriptors on the same materials. The groups differ in more than their source (AFLOW and JARVIS's own structures are often hypothetical or two-dimensional), which is why the comparison is a ratio to the descriptors within each group rather than an MAE.
 
-The 95 % interval comes from a cluster bootstrap: whole chemical systems are drawn with replacement, not single materials. Materials of one chemical system share much of their error, and with an element held out a compound is in the test set of each of its elements; resampling single materials treats all of them as independent and gives intervals that are too narrow (printed for comparison).
+The 95 % interval comes from a cluster bootstrap: whole clusters are drawn with replacement, not single materials. The clusters are the structure types (prototype labels) for the prototype split, whose test sets are whole structure types, and the chemical systems for every other split. Materials of one cluster share much of their error, and with an element held out a compound is in the test set of each of its elements; resampling single materials treats all of them as independent and gives intervals that are too narrow (printed for comparison).
 
 The source is a proxy for "seen", and it errs in one direction. A structure taken from AFLOW or from JARVIS itself may also be in the Materials Project, and Alexandria contains many structures derived from the Materials Project, so the group "from other sources" holds materials that the model has seen, Orb's most of all. This makes the two groups more alike: a difference found here understates the real one, and no difference does not rule out that having seen a compound helps. Materials Project entries with `mvc-` identifiers form a group of their own, because whether they are in MPtrj is not known. Groups of fewer than 100 materials are not shown.
 """)
@@ -484,12 +530,12 @@ def source_groups(m, src):
 
 
 seen_rows = []
-print(f"{'split':24s} {'features':16s} {'group':24s} {'n':>6s} {'systems':>7s}  MAE features / descriptors, "
-      "95 % interval (systems resampled | materials resampled)")
+print(f"{'split':24s} {'features':16s} {'group':24s} {'n':>6s} {'clusters':>8s}  MAE features / descriptors, "
+      "95 % interval (clusters resampled | materials resampled)")
 for split in SPLITS:
     rs = rows_of(split)
     src = np.concatenate([r["src"] for r in rs])
-    system = np.concatenate([r["sys"] for r in rs])
+    system = np.concatenate([r["unit"] for r in rs])
     for m in METHODS[1:]:
         ef = np.concatenate([np.abs(r["mu"][m] - r["y_test"]) for r in rs])
         ed = np.concatenate([np.abs(r["mu"]["descriptors"] - r["y_test"]) for r in rs])
@@ -500,8 +546,30 @@ for split in SPLITS:
             _, lo_m, hi_m = cluster_ci(ef[mask], ed[mask], np.arange(mask.sum()))
             n_sys = len(np.unique(system[mask]))
             seen_rows.append((split, m, label, int(mask.sum()), n_sys, q, lo, hi))
-            print(f"{split:24s} {NAMES[m]:16s} {label:24s} {mask.sum():6d} {n_sys:7d} {q:7.3f} ({lo:.3f}-{hi:.3f} | "
+            print(f"{split:24s} {NAMES[m]:16s} {label:24s} {mask.sum():6d} {n_sys:8d} {q:7.3f} ({lo:.3f}-{hi:.3f} | "
                   f"{lo_m:.3f}-{hi_m:.3f})")
+""")
+
+md(r"""
+The same division for the energy baseline of section 3: if a model's energy transfers well because the model learned the DFT energies of the test compounds themselves, its MAE relative to the descriptors should be lowest for the materials from its pretraining source.
+""")
+
+code(r"""
+energy_seen_rows = []
+print(f"{'split':24s} {'energy of':16s} {'group':24s} {'n':>6s}  MAE energy baseline / descriptors (95 % interval)")
+for split in E_ROWS:
+    rs = rows_of(split)
+    src = np.concatenate([r["src"] for r in rs])
+    unit = np.concatenate([r["unit"] for r in rs])
+    ed = np.concatenate([np.abs(r["mu"]["descriptors"] - r["y_test"]) for r in rs])
+    for m in E_METHODS:
+        ee = np.concatenate([np.abs(r["energy_mu"][m] - r["y_test"]) for r in rs])
+        for label, mask in source_groups(m, src):
+            if mask.sum() < 100:
+                continue
+            q, lo, hi = cluster_ci(ee[mask], ed[mask], unit[mask])
+            energy_seen_rows.append((split, m, label, int(mask.sum()), q, lo, hi))
+            print(f"{split:24s} {NAMES[m]:16s} {label:24s} {mask.sum():6d}  {q:.3f} ({lo:.3f}-{hi:.3f})")
 """)
 
 code(r"""
@@ -532,7 +600,7 @@ md(r"""
 
 Every structure turned by its own random rotation, the Orb features computed again, and the downstream ensembles fitted again on six test sets (the first fold of each cross-validation, and F, O and Cu held out: two of the hardest elements and one typical one). If the orientation in which JARVIS stores the structures carried information, the error would change.
 
-Both fits predict the same test materials, so the difference of the MAEs (rotated minus stored) gets a paired 95 % interval, from resampling whole chemical systems as in section 4. One random rotation per structure is one draw: an interval that contains zero means that no effect of the orientation was found on that test set.
+Both fits predict the same test materials, so the difference of the MAEs (rotated minus stored) gets a paired 95 % interval, from resampling whole clusters as in section 4. One random rotation per structure is one draw: an interval that contains zero means that no effect of the orientation was found on that test set.
 """)
 
 code(r"""
@@ -547,7 +615,7 @@ if "orb-v3-omat-rotated" in FEAT:
         r = R[t.key]
         a, b = mae(r, "orb-v3-omat"), float(np.mean(np.abs(res[0]["test_mu"] - r["y_test"])))
         diff = np.abs(res[0]["test_mu"] - r["y_test"]) - np.abs(r["mu"]["orb-v3-omat"] - r["y_test"])
-        _, lo, hi = cluster_ci(diff, np.ones_like(diff), r["sys"])
+        _, lo, hi = cluster_ci(diff, np.ones_like(diff), r["unit"])
         rot_rows.append((t.key, a, b, lo, hi))
         print(f"{t.key:12s} {a:24.4f} {b:13.4f} {b - a:+12.4f} ({lo:+.4f} to {hi:+.4f}) "
               f"{np.corrcoef(r['mu']['orb-v3-omat'], res[0]['test_mu'])[0, 1]:27.4f}")
@@ -597,6 +665,8 @@ export = {
                   **{f"mae_{m}": float(mae_el[m][i]) for m in METHODS}} for i, e in enumerate(elements)],
     "cgcnn_elements": {"elements": list(cg_el), "mae": {NAMES.get(m, m): [float(x) for x in v] for m, v in table12.items()}},
     "energy_baseline": energy_table,
+    "energy_baseline_by_source": [dict(zip(("split", "model", "group", "n", "ratio", "lo", "hi"), row, strict=True))
+                                  for row in energy_seen_rows],
     "seen_in_pretraining": [dict(zip(("split", "model", "group", "n", "systems", "ratio", "lo", "hi"), row, strict=True))
                             for row in seen_rows],
     "rotation": [dict(zip(("task", "mae_stored", "mae_rotated", "difference_lo", "difference_hi"), row, strict=True))
@@ -614,19 +684,21 @@ print("written pretrained_features_results.json")
 md(r"""
 ## Discussion
 
-**The features are the models' own.** They agree with each package's outputs (MACE's descriptors, CHGNet's crystal feature and energy, Orb's calculator energy) to float32 rounding. MACE's and CHGNet's features are invariant to atom order, cell choice, rotations and reflections; Orb's to order and cell, but not to rotations: at the 99th percentile a rotation changes a feature by 0.41 of its spread between materials, by up to 2.8 times, while Orb's energy changes by at most 5 × 10⁻⁴ eV/atom. Fitted again with every structure turned, six test sets changed their MAE by 0.2–3 % (predictions correlated at 0.992 or more), so the orientation in which JARVIS stores the structures does not drive the results.
+**The features are the models' own.** They agree with each package's outputs (MACE's descriptors, CHGNet's crystal feature and energy, Orb's calculator energy) to float32 rounding. MACE's and CHGNet's features are invariant to atom order, cell choice, rotations and reflections; Orb's to order and cell, but not to rotations: at the 99th percentile a rotation changes a feature by 0.41 of its spread between materials, by up to 2.8 times, while Orb's energy changes by at most 5 × 10⁻⁴ eV/atom. Fitted again with every structure turned, six test sets changed their MAE by 0.2–3 % (predictions correlated at 0.992 or more); the paired 95 % interval excludes zero only for the first chemical-system fold (+2.9 %). The orientation in which JARVIS stores the structures does not drive the results.
 
 **Frozen features beat the descriptors, but not a network trained on the task.** With the same gradient-boosting ensemble, the features of all three models beat the 150 descriptors on every fold of every cross-validation and on the prospective test (except one chemical-system fold for MACE): 4–14 % lower MAE on the random split and 29–39 % lower on new structure types, where the loss under shift falls from 1.79 times the random-split MAE to 1.28–1.39 times. CGCNN trained from scratch on the same materials is better still on all these splits (0.056 eV/atom random, 0.084 on new structure types, against 0.075–0.084 and 0.096–0.111): a representation pretrained for energies and forces, read by gradient boosting, leaves much of what end-to-end training on the target gets.
 
+**For CHGNet, the pretrained energy does better than the features.** CHGNet's energy per atom with one linear correction per element, fitted by least squares on the training materials of each test set, reaches 0.069 eV/atom on the random split, against 0.075 for gradient boosting on CHGNet's features and 0.088 on the descriptors, and it hardly degrades under shift: 0.070 on new chemical systems, 0.070 on new structure types and 0.079 on the materials added later. On new structure types it has the lowest error of any method here, CGCNN included (0.084); on the other splits CGCNN stays ahead (0.056, 0.062, 0.073). The coefficient of the energy is 1.003–1.012 on every test set: CHGNet's energy differences between materials are those of JARVIS up to one constant per element. The same baseline with MACE's energy is worse than the descriptors on every split but new structure types (0.120–0.129 eV/atom). The difference between the two models' energies shows why. Regressed on the fractions of oxygen, fluorine and the +U metals in oxides and fluorides, it reproduces the MP2020 corrections of Materials Project: −0.680 eV per oxygen atom in oxides without a +U metal (MP2020: −0.687), within 0.01 eV per atom of V, Cr, Mn and W and within 0.11 eV of Co, Fe, Ni and Mo, and a median of −0.002 eV/atom for materials without any corrected species. CHGNet learned the MP2020-corrected energies, MACE-MP-0b3 the uncorrected mixture of PBE and PBE+U. The anion corrections are proportional to the fraction of oxygen or fluorine and are absorbed by the per-element terms, but the +U corrections apply to a metal only in its oxides and fluorides, which one constant per element cannot represent. CHGNet's advantage does not come from the materials it was pretrained on: relative to the descriptors its energy does as well or better on the materials from other sources than on those from Materials Project (MAE ratio 0.73 against 0.80 on the random split, 0.33 against 0.51 on new structure types, 0.58 against 1.00 on the materials added later).
+
 **With an element held out, pretraining helps on average, not uniformly.** Over all 78 held-out elements the mean MAE falls from 0.160 to 0.137–0.148 eV/atom, and the features are better on 48 (MACE), 54 (CHGNet) and 61 (Orb) of the 78. On the 12 elements of the `cgcnn` experiment the features of MACE and CHGNet beat both the descriptors and CGCNN (mean MAE 0.258 and 0.281 against 0.303 and 0.382). Fluorides gain the most: R² 0.11 rises to 0.29, 0.53 and 0.68, and the MAE falls from 0.75 to 0.70, 0.55 and 0.45 eV/atom (CGCNN: 1.24). But no feature set is better everywhere. Hydrides are predicted far better with MACE's and Orb's features (R² 0.94 and 0.90 against 0.66) and worse with CHGNet's (0.47); oxides fail with Orb's features (R² −0.93, all overestimated by 1.17 eV/atom on average) although Orb was pretrained on oxides; beryllium and carbon compounds are predicted worse by all three. The hard elements stay hard: the per-element R² of the features ranks the elements like that of the descriptors (Spearman 0.77–0.81).
 
-**The gain of the MPtrj models sits on Materials Project structures.** For MACE-MP-0b3 the features beat the descriptors on test materials whose starting structure came from Materials Project (MAE ratio 0.91 on the random split, 0.85 with elements held out, 0.84 on the materials added later) and hardly or not at all on the others (1.06, 0.99, 0.96); CHGNet shows the same direction, less strongly (0.84 against 0.89, 0.91 against 0.99, 0.85 against 0.89). The structure-type split goes the other way, and Orb, pretrained on data derived from Alexandria, is worse than the descriptors on the Alexandria-sourced materials added after 2021 (1.10 against 0.88 for the others). So much of what the MPtrj models add for an unseen element is added for compounds whose structures, and possibly whose PBE energies, were in their pretraining data. The source labels cannot tell memorization from a better coverage of Materials-Project-like chemistry, because the groups differ in what they hold: 43 % of the Materials-Project-sourced materials of the 2021 snapshot have an ICSD entry (an experimentally reported compound), none of the materials from the other sources do.
+**The gain of the MPtrj models' features sits on Materials Project structures.** For MACE-MP-0b3 the features beat the descriptors on test materials whose starting structure came from Materials Project (MAE ratio 0.91 on the random split, 0.85 with elements held out, 0.84 on the materials added later) and not on the others (1.09, 1.01, 0.96); CHGNet shows the same direction, less strongly (0.84 against 0.90, 0.90 against 1.02, 0.85 against 0.89). On new structure types the intervals, which resample whole structure types, are wide and overlap. Orb, pretrained on data derived from Alexandria, is worse than the descriptors on the Alexandria-sourced materials added after 2021 (1.10 against 0.88 for the others). So much of what the MPtrj models add for an unseen element is added for compounds whose structures, and possibly whose PBE energies, were in their pretraining data. The source labels cannot tell memorization from a better coverage of Materials-Project-like chemistry, because the groups differ in what they hold: 43 % of the Materials-Project-sourced materials of the 2021 snapshot have an ICSD entry (an experimentally reported compound), none of the materials from the other sources do.
 
 **The uncertainty does not improve.** The spread of the five gradient-boosting models ranks the errors slightly worse on the features than on the descriptors (median Spearman 0.43–0.50 against 0.49–0.54 on the random and prospective test sets, 0.37–0.41 against 0.46–0.47 on the group splits, 0.24–0.26 against 0.27 with an element held out), and conformal intervals scaled by it cover about the same.
 
-**Caveats.** The models are used frozen, with gradient boosting on the mean and standard deviation of their last-layer atom features; fine-tuning, a neural readout or other layers might do better. One checkpoint of each model was used, and the downstream models were not tuned. Whether a test compound is in a pretraining set is inferred from where JARVIS took its structure, not checked against MPtrj or OMat24.
+**Caveats.** The models are used frozen, with gradient boosting on the mean and standard deviation of their last-layer atom features; fine-tuning, a neural readout or other layers might do better. One checkpoint of each model was used, and the downstream models were not tuned. Whether a test compound is in a pretraining set is inferred from where JARVIS took its structure, not checked against MPtrj or OMat24. The energy baseline uses each model's energy as it comes; MACE's energy with the MP2020 corrections applied, and Orb's energy, were not tried, and it cannot be applied with an element held out.
 
-Pretraining on every element narrows the gap that `cgcnn` found for unseen elements, most clearly for fluorides and hydrides, but it is not a general fix: which elements improve depends on the model, one model fails badly on oxides, and for the MPtrj models the gain concentrates on compounds that come from their own pretraining source.
+Pretraining on every element narrows the gap that `cgcnn` found for unseen elements, most clearly for fluorides and hydrides, but it is not a general fix: which elements improve depends on the model, one model fails badly on oxides, and for the MPtrj models the gain of the features concentrates on compounds that come from their own pretraining source. The most robust transfer here goes through the energy, not the features: CHGNet's MP2020-corrected energy, with one constant per element, predicts JARVIS formation energies of new structure types and of later materials almost as well as on a random split.
 """)
 
 nb = nbf.v4.new_notebook()
