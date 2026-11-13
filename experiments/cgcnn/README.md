@@ -115,7 +115,7 @@ The 243 networks (5 on the leaderboard split, 215 on the shift test sets, 3 chec
 - **A test added after the results.** The feature-column test was designed after the poor result for F had been seen. Its elements are fixed by a rule (every held-out element with a column that no training material has), not chosen by result.
 - **One assignment of materials per task.** The only replication is over the five seeds; the spread given is between folds or elements.
 - **Not bit-for-bit reproducible.** The GPU adds the messages of the convolution in an unspecified order, so a rerun gives slightly different numbers (in the checks above, equal to four decimals).
-- **Training times are upper bounds.** Three processes shared one GPU, so the time stored with each network is longer than the network would take alone (about 11.5 minutes for 300 epochs on the leaderboard split).
+- **Training times are upper bounds.** Three processes shared one GPU, so the time stored with each network is longer than the network would take alone.
 
 ## Files
 

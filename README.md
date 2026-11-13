@@ -3,13 +3,15 @@
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-**Latest result.** A graph network that reads the crystal structure (CGCNN, re-implemented and checked against the authors' code) predicts the formation energy of new chemical systems, new structure types and materials computed later with 36–47 % lower error than gradient boosting on descriptors, trained on the same materials. On compounds of an element it has never seen it does worse, on 10 of 12 elements; fluorides are overestimated by 1.2 eV/atom, and untrained input weights explain only a tenth of that. Read the [experiment](experiments/cgcnn/).
+**Status: complete.** All six experiments are done, and the repository is archived. The last one found that the most robust predictor of JARVIS formation energies here is not a model trained on them but a pretrained potential's own energy: CHGNet's energy per atom with one constant per element reaches 0.069 eV/atom on a random split and 0.070 on structure types absent from training, where it beats every model in this repository, CGCNN included (0.084). It works because CHGNet learned the MP2020-corrected energies of the Materials Project; MACE-MP-0b3, which learned the uncorrected ones, does not transfer this way. Read the [experiment](experiments/pretrained_features/).
 
-[![Test R² when all compounds of one element are held out: CGCNN, gradient boosting, and XGBoost and ALIGNN of Li et al. 2024](experiments/cgcnn/figures/leave_one_element_out.png)](experiments/cgcnn/)
+[![Test R² when all compounds of one element are held out: descriptors against the frozen features of MACE-MP-0b3, CHGNet and Orb v3](experiments/pretrained_features/figures/leave_one_element_out.png)](experiments/pretrained_features/)
+
+**Next.** Future work will build a research question on these tools and findings, in a separate repository.
 
 Small, tested building blocks for machine learning on crystal structures, and experiments that ask how far each one can be trusted. Every method is first shown to be correct against something independent (**verification**: closed forms, symmetry invariants, reference software), then applied to real data and compared with published results (**validation**). The recurring question is the one every materials ML result has to answer: how well does the model do on materials unlike the ones it was trained on, and does it know when it is unreliable?
 
-Every experiment is sized to run in hours, not days, on a single 12 GB consumer GPU.
+Every experiment runs on one desktop computer with a 12 GB consumer GPU, in at most about a day of wall-clock time.
 
 ## Reading order
 
@@ -20,7 +22,7 @@ Every experiment is sized to run in hours, not days, on a single 12 GB consumer 
 | 3 | [data_splits](experiments/data_splits/) | How much does a random train/test split overstate accuracy compared with chemistry- and structure-aware splits? | `splits` | done: formation-energy MAE 0.076 eV/atom (random) rises to 0.097 (chemical systems held out), 0.145 (structure prototypes) and 0.109 (materials added to JARVIS after 2021); the elements hardest to hold out (F, N, H, O, Be, C) are those of Li et al. 2024 (Spearman 0.95 over 78 elements) |
 | 4 | [uncertainty](experiments/uncertainty/) | Can a model tell when its prediction is unreliable? Ensembles, quantile regression, random forests, Gaussian processes, deep ensembles and conformal intervals, under distribution shift | `uncertainty` | done: conformal 90 % intervals cover 0.897–0.902 on random and chemical-system splits but 0.71–0.81 with an element held out (0.14 for fluorine compounds); the random forest's spread ranks errors best (Spearman 0.59–0.64 on all splits) but only 0.43 within an unseen element; bootstrap standard deviations are 2.5–3.8 times too small |
 | 5 | [cgcnn](experiments/cgcnn/) | Does a graph network that reads the structure do better than descriptors on unfamiliar materials? A faithful re-implementation of CGCNN (Xie & Grossman, 2018) | `cgcnn` | done: same outputs as the authors' code with the same weights; JARVIS leaderboard reproduced (0.0641 ± 0.0012 vs 0.0625 eV/atom); on the test sets of `uncertainty` the ensemble has 36–47 % lower MAE than gradient boosting with new chemical systems, structure types or later materials, but is worse on 10 of 12 held-out elements (fluorides 1.24 vs 0.75 eV/atom) |
-| 6 | [pretrained_features](experiments/pretrained_features/) | Do frozen features of pretrained universal interatomic potentials (MACE-MP-0b3, CHGNet, Orb v3) close the gap for unseen elements? | `pretrained` | done: on the 109 test sets of `uncertainty` the features beat 150 descriptors on every cross-validation fold but one (4–39 % lower MAE) and on 48–61 of 78 held-out elements (fluorides 0.75 → 0.45–0.70 eV/atom), but not a CGCNN trained on the task; the gain of the two MPtrj-pretrained models concentrates on test materials whose structure came from Materials Project |
+| 6 | [pretrained_features](experiments/pretrained_features/) | Do frozen features of pretrained universal interatomic potentials (MACE-MP-0b3, CHGNet, Orb v3) close the gap for unseen elements? | `pretrained` | done: on the 109 test sets of `uncertainty` the features beat 150 descriptors on every cross-validation fold but one (4–39 % lower MAE) and on 48–61 of 78 held-out elements (fluorides 0.75 → 0.45–0.70 eV/atom), but not a CGCNN trained on the task; the gain of the two MPtrj-pretrained models' features concentrates on test materials whose structure came from Materials Project; CHGNet's own energy with one constant per element does better than its features (0.069–0.079 eV/atom on every split but held-out elements) |
 
 Later experiments reuse earlier code (the CGCNN experiment uses the graphs of the first), so the reusable code lives in one package and the experiments import it.
 
@@ -30,6 +32,7 @@ Later experiments reuse earlier code (the CGCNN experiment uses the graphs of th
 Materials-ML-Primer/
 ├── pyproject.toml
 ├── environment.yml           # conda environment "mmp"
+├── requirements-lock.txt     # the exact package versions the notebooks were executed with
 ├── THIRD_PARTY_NOTICES.md    # licenses of data taken from other projects
 ├── materials_ml_primer/      # reusable code, one module per topic
 ├── tests/                    # pytest suite for the package
@@ -62,7 +65,7 @@ Where an experiment has an interactive page, its notebook also writes `<topic>_r
 ## Quick start
 
 ```bash
-conda env create -f environment.yml   # once; installs PyTorch with CUDA 13.2 wheels
+conda env create -f environment.yml   # once; installs PyTorch with CUDA 13.2 wheels (exact versions: requirements-lock.txt)
 conda activate mmp
 pip install -e .                      # makes materials_ml_primer importable everywhere
 pytest -q                             # 324 tests; -m "not needs_weights" skips the 18 that download

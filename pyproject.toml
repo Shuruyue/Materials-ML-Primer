@@ -16,6 +16,10 @@ dependencies = ["numpy>=1.26", "scipy", "jarvis-tools", "spglib>=2.5"]
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pymatgen"]
 notebooks = ["matplotlib", "scikit-learn>=1.6", "pymatgen", "jupyterlab", "ipykernel", "nbconvert"]
+# materials_ml_primer.cgcnn and .uncertainty (install PyTorch for your CUDA version first; see environment.yml)
+models = ["torch", "pymatgen", "scikit-learn>=1.6", "gpytorch"]
+# materials_ml_primer.pretrained: the versions the experiment was run with
+pretrained = ["torch", "ase", "mace-torch==0.3.17", "chgnet==0.4.2", "orb-models==0.7.0"]
 
 [tool.setuptools]
 packages = ["materials_ml_primer"]
