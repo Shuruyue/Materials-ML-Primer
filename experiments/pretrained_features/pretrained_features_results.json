@@ -51,6 +51,12 @@
    "chgnet-0.3.0": 0.1477078876873068,
    "orb-v3-omat": 0.13689117508642992
   },
+  "leave one element out, CGCNN's 12": {
+   "descriptors": 0.30320537034192757,
+   "mace-mp-0b3": 0.25757803451298134,
+   "chgnet-0.3.0": 0.2811347157821009,
+   "orb-v3-omat": 0.30593128259195673
+  },
   "prospective": {
    "descriptors": 0.11651006505053241,
    "mace-mp-0b3": 0.10885797213062212,
@@ -1084,358 +1090,734 @@
    ]
   }
  },
+ "energy_baseline": {
+  "random": {
+   "mace-mp-0b3": 0.11974287980587202,
+   "chgnet-0.3.0": 0.0692794062183578
+  },
+  "chemical-system groups": {
+   "mace-mp-0b3": 0.12135112435086426,
+   "chgnet-0.3.0": 0.06995900121636603
+  },
+  "prototype groups": {
+   "mace-mp-0b3": 0.12196574679015584,
+   "chgnet-0.3.0": 0.07031796094046705
+  },
+  "prospective": {
+   "mace-mp-0b3": 0.12929635684542104,
+   "chgnet-0.3.0": 0.07872473551235522
+  }
+ },
+ "energy_baseline_by_source": [
+  {
+   "split": "random",
+   "model": "mace-mp-0b3",
+   "group": "from Materials Project",
+   "n": 43040,
+   "ratio": 1.4905670379517157,
+   "lo": 1.4207515575717562,
+   "hi": 1.5663728924823364
+  },
+  {
+   "split": "random",
+   "model": "mace-mp-0b3",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "ratio": 3.0160640697756516,
+   "lo": 2.61766280980743,
+   "hi": 3.4102202961667136
+  },
+  {
+   "split": "random",
+   "model": "mace-mp-0b3",
+   "group": "from other sources",
+   "n": 11154,
+   "ratio": 0.9116618377523168,
+   "lo": 0.8807158729178122,
+   "hi": 0.9442449078390023
+  },
+  {
+   "split": "random",
+   "model": "chgnet-0.3.0",
+   "group": "from Materials Project",
+   "n": 43040,
+   "ratio": 0.7980497408925802,
+   "lo": 0.7650826077222699,
+   "hi": 0.8331758793520347
+  },
+  {
+   "split": "random",
+   "model": "chgnet-0.3.0",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "ratio": 1.1499349954241729,
+   "lo": 0.9883901064576085,
+   "hi": 1.3209029776805234
+  },
+  {
+   "split": "random",
+   "model": "chgnet-0.3.0",
+   "group": "from other sources",
+   "n": 11154,
+   "ratio": 0.7343849543930366,
+   "lo": 0.7096213149397733,
+   "hi": 0.7609455151208147
+  },
+  {
+   "split": "chemical-system groups",
+   "model": "mace-mp-0b3",
+   "group": "from Materials Project",
+   "n": 43040,
+   "ratio": 1.2302221106114641,
+   "lo": 1.171357802040631,
+   "hi": 1.2965282249081214
+  },
+  {
+   "split": "chemical-system groups",
+   "model": "mace-mp-0b3",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "ratio": 2.3193001809580602,
+   "lo": 2.0149041320987378,
+   "hi": 2.6296978189658984
+  },
+  {
+   "split": "chemical-system groups",
+   "model": "mace-mp-0b3",
+   "group": "from other sources",
+   "n": 11154,
+   "ratio": 0.8175774650151648,
+   "lo": 0.7884073346369285,
+   "hi": 0.8486943426991236
+  },
+  {
+   "split": "chemical-system groups",
+   "model": "chgnet-0.3.0",
+   "group": "from Materials Project",
+   "n": 43040,
+   "ratio": 0.6566375688483272,
+   "lo": 0.6278791698522219,
+   "hi": 0.6868881335060375
+  },
+  {
+   "split": "chemical-system groups",
+   "model": "chgnet-0.3.0",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "ratio": 0.8763967719946969,
+   "lo": 0.7576319868686405,
+   "hi": 1.0007795370402517
+  },
+  {
+   "split": "chemical-system groups",
+   "model": "chgnet-0.3.0",
+   "group": "from other sources",
+   "n": 11154,
+   "ratio": 0.6579686755809273,
+   "lo": 0.6337978667664497,
+   "hi": 0.6824388994516191
+  },
+  {
+   "split": "prototype groups",
+   "model": "mace-mp-0b3",
+   "group": "from Materials Project",
+   "n": 43040,
+   "ratio": 0.9483311963013706,
+   "lo": 0.8143660365668877,
+   "hi": 1.1116013504384081
+  },
+  {
+   "split": "prototype groups",
+   "model": "mace-mp-0b3",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "ratio": 1.9954885036277161,
+   "lo": 1.528674478662349,
+   "hi": 2.5736790396782263
+  },
+  {
+   "split": "prototype groups",
+   "model": "mace-mp-0b3",
+   "group": "from other sources",
+   "n": 11154,
+   "ratio": 0.41491278801855597,
+   "lo": 0.32640165977456403,
+   "hi": 0.5652663784424782
+  },
+  {
+   "split": "prototype groups",
+   "model": "chgnet-0.3.0",
+   "group": "from Materials Project",
+   "n": 43040,
+   "ratio": 0.5055815243341734,
+   "lo": 0.44218450319038133,
+   "hi": 0.5848416061717217
+  },
+  {
+   "split": "prototype groups",
+   "model": "chgnet-0.3.0",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "ratio": 0.7612909222163142,
+   "lo": 0.5993517347823382,
+   "hi": 0.9663877535916715
+  },
+  {
+   "split": "prototype groups",
+   "model": "chgnet-0.3.0",
+   "group": "from other sources",
+   "n": 11154,
+   "ratio": 0.3333038153364031,
+   "lo": 0.2573377550371319,
+   "hi": 0.45535753249408545
+  },
+  {
+   "split": "prospective",
+   "model": "mace-mp-0b3",
+   "group": "from Materials Project",
+   "n": 14305,
+   "ratio": 2.0590579802673648,
+   "lo": 1.8974702668240362,
+   "hi": 2.2646578305161036
+  },
+  {
+   "split": "prospective",
+   "model": "mace-mp-0b3",
+   "group": "from other sources",
+   "n": 23838,
+   "ratio": 0.8339967365240079,
+   "lo": 0.8108080366028928,
+   "hi": 0.858528560112589
+  },
+  {
+   "split": "prospective",
+   "model": "chgnet-0.3.0",
+   "group": "from Materials Project",
+   "n": 14305,
+   "ratio": 1.0032345856910023,
+   "lo": 0.9225074599403579,
+   "hi": 1.1047595414774531
+  },
+  {
+   "split": "prospective",
+   "model": "chgnet-0.3.0",
+   "group": "from other sources",
+   "n": 23838,
+   "ratio": 0.5809187498058754,
+   "lo": 0.567287225644413,
+   "hi": 0.5948682838774404
+  }
+ ],
  "seen_in_pretraining": [
   {
    "split": "random",
    "model": "mace-mp-0b3",
    "group": "from Materials Project",
    "n": 43040,
-   "ratio": 0.9091186267941586,
-   "lo": 0.8966248550771135,
-   "hi": 0.9222112887317208
+   "systems": 20636,
+   "ratio": 0.9091186267941587,
+   "lo": 0.8936505849278052,
+   "hi": 0.9242859505865358
+  },
+  {
+   "split": "random",
+   "model": "mace-mp-0b3",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "systems": 619,
+   "ratio": 0.7778810470243535,
+   "lo": 0.7266339801511549,
+   "hi": 0.8341598133026666
   },
   {
    "split": "random",
    "model": "mace-mp-0b3",
    "group": "from other sources",
-   "n": 12672,
-   "ratio": 1.0596039074064985,
-   "lo": 1.0349943310060874,
-   "hi": 1.085040217261122
+   "n": 11154,
+   "systems": 4289,
+   "ratio": 1.0864300340812802,
+   "lo": 1.0560370359654714,
+   "hi": 1.117033518719028
   },
   {
    "split": "random",
    "model": "chgnet-0.3.0",
    "group": "from Materials Project",
    "n": 43040,
+   "systems": 20636,
    "ratio": 0.8434903701004153,
-   "lo": 0.8316863288653981,
-   "hi": 0.8560135657911995
+   "lo": 0.8284640302606527,
+   "hi": 0.8582866848367835
+  },
+  {
+   "split": "random",
+   "model": "chgnet-0.3.0",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "systems": 619,
+   "ratio": 0.7208009739780342,
+   "lo": 0.6724802356468161,
+   "hi": 0.7750032007139754
   },
   {
    "split": "random",
    "model": "chgnet-0.3.0",
    "group": "from other sources",
-   "n": 12672,
-   "ratio": 0.8863991551804535,
-   "lo": 0.8659206942439164,
-   "hi": 0.9076527615048413
+   "n": 11154,
+   "systems": 4289,
+   "ratio": 0.9021676937364789,
+   "lo": 0.8756839800717091,
+   "hi": 0.9300473149332065
+  },
+  {
+   "split": "random",
+   "model": "orb-v3-omat",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "systems": 619,
+   "ratio": 0.8215880512317194,
+   "lo": 0.7567228917464746,
+   "hi": 0.8911261606788047
   },
   {
    "split": "random",
    "model": "orb-v3-omat",
    "group": "from other sources",
-   "n": 55712,
-   "ratio": 0.904530384687683,
-   "lo": 0.8932489418560681,
-   "hi": 0.9163448880423145
+   "n": 54194,
+   "systems": 23139,
+   "ratio": 0.9068983633777271,
+   "lo": 0.8923660113718347,
+   "hi": 0.9218980828520276
   },
   {
    "split": "chemical-system groups",
    "model": "mace-mp-0b3",
    "group": "from Materials Project",
    "n": 43040,
+   "systems": 20636,
    "ratio": 0.9135303573861133,
-   "lo": 0.9009225546792801,
-   "hi": 0.9255583126947962
+   "lo": 0.8886667602735836,
+   "hi": 0.9368275096957546
+  },
+  {
+   "split": "chemical-system groups",
+   "model": "mace-mp-0b3",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "systems": 619,
+   "ratio": 0.7853848223107762,
+   "lo": 0.7229821122119421,
+   "hi": 0.8521871195399386
   },
   {
    "split": "chemical-system groups",
    "model": "mace-mp-0b3",
    "group": "from other sources",
-   "n": 12672,
-   "ratio": 1.0333426910739192,
-   "lo": 1.0108479743101224,
-   "hi": 1.057808667715612
+   "n": 11154,
+   "systems": 4289,
+   "ratio": 1.0612061744774144,
+   "lo": 1.0257438826340104,
+   "hi": 1.0968436066294929
   },
   {
    "split": "chemical-system groups",
    "model": "chgnet-0.3.0",
    "group": "from Materials Project",
    "n": 43040,
-   "ratio": 0.8705783908404151,
-   "lo": 0.8591758823101225,
-   "hi": 0.8824374072919281
+   "systems": 20636,
+   "ratio": 0.870578390840415,
+   "lo": 0.8433835012164611,
+   "hi": 0.8977479745198753
+  },
+  {
+   "split": "chemical-system groups",
+   "model": "chgnet-0.3.0",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "systems": 619,
+   "ratio": 0.7606202145834486,
+   "lo": 0.6860800275659921,
+   "hi": 0.8409973762797712
   },
   {
    "split": "chemical-system groups",
    "model": "chgnet-0.3.0",
    "group": "from other sources",
-   "n": 12672,
-   "ratio": 0.8986259263886079,
-   "lo": 0.8788020060735966,
-   "hi": 0.9191175436532051
+   "n": 11154,
+   "systems": 4289,
+   "ratio": 0.9141338829606325,
+   "lo": 0.8851698635791349,
+   "hi": 0.9430575833971531
+  },
+  {
+   "split": "chemical-system groups",
+   "model": "orb-v3-omat",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "systems": 619,
+   "ratio": 0.8047387656974035,
+   "lo": 0.719266227482098,
+   "hi": 0.9065716590329097
   },
   {
    "split": "chemical-system groups",
    "model": "orb-v3-omat",
    "group": "from other sources",
-   "n": 55712,
-   "ratio": 0.8793400941675492,
-   "lo": 0.868084002547241,
-   "hi": 0.8904471871807979
+   "n": 54194,
+   "systems": 23139,
+   "ratio": 0.8816918015795874,
+   "lo": 0.8600429213038407,
+   "hi": 0.9039085449386395
   },
   {
    "split": "prototype groups",
    "model": "mace-mp-0b3",
    "group": "from Materials Project",
    "n": 43040,
+   "systems": 6825,
    "ratio": 0.7385631048506612,
-   "lo": 0.7296524584929389,
-   "hi": 0.7477122828155082
+   "lo": 0.7061872912869823,
+   "hi": 0.7793885771355054
+  },
+  {
+   "split": "prototype groups",
+   "model": "mace-mp-0b3",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "systems": 292,
+   "ratio": 0.6316168506107388,
+   "lo": 0.5241646714945958,
+   "hi": 0.7663784494313178
   },
   {
    "split": "prototype groups",
    "model": "mace-mp-0b3",
    "group": "from other sources",
-   "n": 12672,
-   "ratio": 0.6609764009509546,
-   "lo": 0.6486193413096422,
-   "hi": 0.6740094799604047
+   "n": 11154,
+   "systems": 881,
+   "ratio": 0.6628748095809889,
+   "lo": 0.5548685255542041,
+   "hi": 0.8169331526311118
   },
   {
    "split": "prototype groups",
    "model": "chgnet-0.3.0",
    "group": "from Materials Project",
    "n": 43040,
+   "systems": 6825,
    "ratio": 0.6697281511966144,
-   "lo": 0.6609490015281557,
-   "hi": 0.6783045239834502
+   "lo": 0.6215726915231087,
+   "hi": 0.7235536525265898
+  },
+  {
+   "split": "prototype groups",
+   "model": "chgnet-0.3.0",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "systems": 292,
+   "ratio": 0.6009630103202096,
+   "lo": 0.4997521450873517,
+   "hi": 0.7226713246795461
   },
   {
    "split": "prototype groups",
    "model": "chgnet-0.3.0",
    "group": "from other sources",
-   "n": 12672,
-   "ratio": 0.5244879461675225,
-   "lo": 0.5132616787623377,
-   "hi": 0.5360344753999267
+   "n": 11154,
+   "systems": 881,
+   "ratio": 0.5195430161502863,
+   "lo": 0.4148999820339333,
+   "hi": 0.6717956057248201
+  },
+  {
+   "split": "prototype groups",
+   "model": "orb-v3-omat",
+   "group": "Materials Project mvc-",
+   "n": 1518,
+   "systems": 292,
+   "ratio": 0.7037461947849094,
+   "lo": 0.56818645219099,
+   "hi": 0.8790574721210253
   },
   {
    "split": "prototype groups",
    "model": "orb-v3-omat",
    "group": "from other sources",
-   "n": 55712,
-   "ratio": 0.7062982973662478,
-   "lo": 0.6976070714844561,
-   "hi": 0.7141976777240338
+   "n": 54194,
+   "systems": 7272,
+   "ratio": 0.7063600050352534,
+   "lo": 0.6228771873723924,
+   "hi": 0.7950682536115965
   },
   {
    "split": "leave one element out",
    "model": "mace-mp-0b3",
    "group": "from Materials Project",
    "n": 124803,
-   "ratio": 0.8480225649969968,
-   "lo": 0.8425649951613929,
-   "hi": 0.8532529504936055
+   "systems": 20627,
+   "ratio": 0.8480225649969969,
+   "lo": 0.8336481725359554,
+   "hi": 0.8627924993926707
+  },
+  {
+   "split": "leave one element out",
+   "model": "mace-mp-0b3",
+   "group": "Materials Project mvc-",
+   "n": 4676,
+   "systems": 619,
+   "ratio": 0.8974743330882745,
+   "lo": 0.8355052915841393,
+   "hi": 0.9597118448313026
   },
   {
    "split": "leave one element out",
    "model": "mace-mp-0b3",
    "group": "from other sources",
-   "n": 37196,
-   "ratio": 0.9921430939344592,
-   "lo": 0.9810650749380141,
-   "hi": 1.0031947604809641
+   "n": 32520,
+   "systems": 4289,
+   "ratio": 1.010289072172204,
+   "lo": 0.9885985601381574,
+   "hi": 1.0323178431189772
   },
   {
    "split": "leave one element out",
    "model": "chgnet-0.3.0",
    "group": "from Materials Project",
    "n": 124803,
+   "systems": 20627,
    "ratio": 0.9046278403242619,
-   "lo": 0.8991787894862447,
-   "hi": 0.9100719790603599
+   "lo": 0.8819168885756269,
+   "hi": 0.9301818364587131
+  },
+  {
+   "split": "leave one element out",
+   "model": "chgnet-0.3.0",
+   "group": "Materials Project mvc-",
+   "n": 4676,
+   "systems": 619,
+   "ratio": 0.8264552156160173,
+   "lo": 0.781317495093359,
+   "hi": 0.8820385997502134
   },
   {
    "split": "leave one element out",
    "model": "chgnet-0.3.0",
    "group": "from other sources",
-   "n": 37196,
-   "ratio": 0.9930346194404741,
-   "lo": 0.981452573188242,
-   "hi": 1.0046921040824426
+   "n": 32520,
+   "systems": 4289,
+   "ratio": 1.024964331096533,
+   "lo": 0.9832176308729333,
+   "hi": 1.0733901693241132
+  },
+  {
+   "split": "leave one element out",
+   "model": "orb-v3-omat",
+   "group": "Materials Project mvc-",
+   "n": 4676,
+   "systems": 619,
+   "ratio": 1.5980914372571438,
+   "lo": 1.5077306996928026,
+   "hi": 1.6848687618432001
   },
   {
    "split": "leave one element out",
    "model": "orb-v3-omat",
    "group": "from other sources",
-   "n": 161999,
-   "ratio": 1.082250001819465,
-   "lo": 1.0758500467318914,
-   "hi": 1.0890141503993502
+   "n": 157323,
+   "systems": 23130,
+   "ratio": 1.0608678649501626,
+   "lo": 1.0422362324039696,
+   "hi": 1.08007090135629
   },
   {
    "split": "prospective",
    "model": "mace-mp-0b3",
    "group": "from Materials Project",
    "n": 14305,
+   "systems": 9273,
    "ratio": 0.8384756350789706,
-   "lo": 0.8193609072253074,
-   "hi": 0.8592141370701926
+   "lo": 0.8140702319658072,
+   "hi": 0.8669647610421821
   },
   {
    "split": "prospective",
    "model": "mace-mp-0b3",
    "group": "from other sources",
-   "n": 23885,
-   "ratio": 0.9619401421465397,
-   "lo": 0.9450952726560382,
-   "hi": 0.979738967629756
+   "n": 23838,
+   "systems": 12368,
+   "ratio": 0.96205070398165,
+   "lo": 0.9410818333966635,
+   "hi": 0.9857952597130875
   },
   {
    "split": "prospective",
    "model": "chgnet-0.3.0",
    "group": "from Materials Project",
    "n": 14305,
-   "ratio": 0.8532959834685306,
-   "lo": 0.8350963916586467,
-   "hi": 0.8736809142458449
+   "systems": 9273,
+   "ratio": 0.8532959834685307,
+   "lo": 0.8285004395440486,
+   "hi": 0.877350626321847
   },
   {
    "split": "prospective",
    "model": "chgnet-0.3.0",
    "group": "from other sources",
-   "n": 23885,
-   "ratio": 0.8942051855176587,
-   "lo": 0.8791812402409479,
-   "hi": 0.9088647342274653
+   "n": 23838,
+   "systems": 12368,
+   "ratio": 0.8940037497027394,
+   "lo": 0.8749938342712331,
+   "hi": 0.9122663618709618
   },
   {
    "split": "prospective",
    "model": "orb-v3-omat",
    "group": "from Alexandria",
    "n": 4492,
+   "systems": 3110,
    "ratio": 1.1020991628613392,
-   "lo": 1.064513861196411,
-   "hi": 1.1409918923429028
+   "lo": 1.063354299134273,
+   "hi": 1.145620619024929
   },
   {
    "split": "prospective",
    "model": "orb-v3-omat",
    "group": "from other sources",
-   "n": 33698,
-   "ratio": 0.8770007184830724,
-   "lo": 0.8635948376677971,
-   "hi": 0.8912097435588195
+   "n": 33651,
+   "systems": 16712,
+   "ratio": 0.8769957002847892,
+   "lo": 0.8600028013164726,
+   "hi": 0.894492370605125
   }
  ],
  "rotation": [
   {
    "task": "random-0",
    "mae_stored": 0.08067736382992943,
-   "mae_rotated": 0.081100458275734
+   "mae_rotated": 0.081100458275734,
+   "difference_lo": -0.0008184598763578803,
+   "difference_hi": 0.0016351559858678478
   },
   {
    "task": "chemical-0",
    "mae_stored": 0.09499909581054726,
-   "mae_rotated": 0.0977081734189076
+   "mae_rotated": 0.0977081734189076,
+   "difference_lo": 0.0010888726165651978,
+   "difference_hi": 0.004389122757009467
   },
   {
    "task": "prototype-0",
    "mae_stored": 0.11173641715859106,
-   "mae_rotated": 0.11455351618510554
+   "mae_rotated": 0.11455351618510554,
+   "difference_lo": -0.002930480189790051,
+   "difference_hi": 0.0037825540521147947
   },
   {
    "task": "element-O",
    "mae_stored": 1.1723813430999455,
-   "mae_rotated": 1.1750409898523864
+   "mae_rotated": 1.1750409898523864,
+   "difference_lo": -0.00010189487020678372,
+   "difference_hi": 0.005592912938585327
   },
   {
    "task": "element-F",
    "mae_stored": 0.45085382195476625,
-   "mae_rotated": 0.4552274792792945
+   "mae_rotated": 0.4552274792792945,
+   "difference_lo": -0.0003816004130851611,
+   "difference_hi": 0.009156107027691268
   },
   {
    "task": "element-Cu",
    "mae_stored": 0.14321775696936734,
-   "mae_rotated": 0.14376683946501362
+   "mae_rotated": 0.14376683946501362,
+   "difference_lo": -0.0016677300716279808,
+   "difference_hi": 0.0028773164089590515
   }
  ],
  "invariance": [
   {
    "model": "mace-mp-0b3",
    "change": "atom order",
-   "median": 1.7373295690958912e-07,
-   "p99": 1.5805104567334638e-06,
-   "max": 1.1161298971273936e-05
+   "median": 1.7399622720404295e-07,
+   "p99": 1.4266225889514317e-06,
+   "max": 6.6507050178188365e-06
   },
   {
    "model": "mace-mp-0b3",
    "change": "supercell",
-   "median": 3.3988487757596886e-07,
-   "p99": 3.5882912925444543e-06,
-   "max": 1.5008445188868791e-05
+   "median": 3.426735020184424e-07,
+   "p99": 3.455510750427493e-06,
+   "max": 1.4664742593595292e-05
   },
   {
    "model": "mace-mp-0b3",
    "change": "rotation",
-   "median": 5.150350261828862e-07,
-   "p99": 5.860576493432745e-06,
-   "max": 2.9986829758854583e-05
+   "median": 5.049764695286285e-07,
+   "p99": 5.906433216296136e-06,
+   "max": 3.007634040841367e-05
   },
   {
    "model": "mace-mp-0b3",
    "change": "reflection",
-   "median": 4.6208620574361703e-07,
-   "p99": 6.016914539941354e-06,
-   "max": 2.7122416213387623e-05
+   "median": 4.621302309715247e-07,
+   "p99": 6.069687060517026e-06,
+   "max": 2.7032900106860325e-05
   },
   {
    "model": "chgnet-0.3.0",
    "change": "atom order",
-   "median": 2.264362990445079e-07,
-   "p99": 8.426316526310984e-06,
-   "max": 5.9102196246385574e-05
+   "median": 2.311742406391204e-07,
+   "p99": 8.4415605670074e-06,
+   "max": 5.9058675105916336e-05
   },
   {
    "model": "chgnet-0.3.0",
    "change": "supercell",
-   "median": 3.64209654435399e-07,
-   "p99": 8.848698598740157e-06,
+   "median": 3.5924506391893374e-07,
+   "p99": 8.849237019603606e-06,
    "max": 6.19408892816864e-05
   },
   {
    "model": "chgnet-0.3.0",
    "change": "rotation",
-   "median": 6.966932915020152e-07,
-   "p99": 1.0263664989906829e-05,
-   "max": 3.3511554647702724e-05
+   "median": 7.076756105561799e-07,
+   "p99": 1.0371893040428404e-05,
+   "max": 3.3293945307377726e-05
   },
   {
    "model": "chgnet-0.3.0",
    "change": "reflection",
-   "median": 6.837565251771593e-07,
-   "p99": 1.1706722943927161e-05,
-   "max": 5.102531213196926e-05
+   "median": 6.820665703344275e-07,
+   "p99": 1.1484206879686099e-05,
+   "max": 5.12452534167096e-05
   },
   {
    "model": "orb-v3-omat",
    "change": "atom order",
-   "median": 5.230591000326967e-07,
-   "p99": 4.542742317426018e-06,
-   "max": 0.00022834129049442708
+   "median": 5.190122465137392e-07,
+   "p99": 7.105966687959153e-06,
+   "max": 0.0003574143920559436
   },
   {
    "model": "orb-v3-omat",
    "change": "supercell",
-   "median": 1.1100319170509465e-06,
-   "p99": 2.4895152819226496e-05,
-   "max": 0.0007301434525288641
+   "median": 1.110548737415229e-06,
+   "p99": 2.6977806555805728e-05,
+   "max": 0.0012728036381304264
   },
   {
    "model": "orb-v3-omat",
    "change": "rotation",
-   "median": 0.0033058826811611652,
-   "p99": 0.40811777114868164,
-   "max": 2.830683708190918
+   "median": 0.0033057578839361668,
+   "p99": 0.4081189036369324,
+   "max": 2.8306832313537598
   },
   {
    "model": "orb-v3-omat",
    "change": "reflection",
-   "median": 0.003250281559303403,
-   "p99": 0.42384007573127747,
-   "max": 2.8306806087493896
+   "median": 0.0032501728273928165,
+   "p99": 0.4238393306732178,
+   "max": 2.8306803703308105
   }
  ],
  "uncertainty": [
